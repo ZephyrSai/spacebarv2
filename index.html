@@ -666,7 +666,10 @@ function cameraFocusPoint() {
   if (!cur) return null;
   let fx = cur.x;
   let fy = cur.y;
-  if (routeChoice && !PL.fly) {
+  if (RUN.encounter && !PL.fly && nxt) {
+    fx = cur.x * .38 + RUN.encounter.x * .24 + nxt.x * .38;
+    fy = cur.y * .38 + RUN.encounter.y * .24 + nxt.y * .38;
+  } else if (routeChoice && !PL.fly) {
     const primary = getPrimaryNode();
     const alt = getAltNode();
     if (primary && alt) {
@@ -1166,7 +1169,7 @@ function maybeSpawnEncounter() {
   const dy = nxt.y - cur.y;
   const dist = Math.hypot(dx, dy) || 1;
   const minDist = mn * (isTeachEncounter ? Math.max(.44, tune.safeDist - .08) : tune.safeDist);
-  const maxDist = mn * (isTeachEncounter ? .84 : .72);
+  const maxDist = mn * (isTeachEncounter ? .66 : .72);
   if (dist < minDist || dist > maxDist) return;
   const nx = -dy / dist;
   const ny = dx / dist;
