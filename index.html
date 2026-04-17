@@ -269,7 +269,7 @@ function persist() {
 applyGraphicsSetting(save.graphics);
 
 const MODE_CONFIG = {
-  easy: { label:'Easy', pointer:88, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.79, lives:4 },
+  easy: { label:'Easy', pointer:88, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4 },
   medium: { label:'Medium', pointer:56, scoreMult:1.25, catchBuffer:5, catchArc:.38, cloudAlpha:.08, orbitSpeed:.92, lives:2 },
   hard: { label:'Hard', pointer:22, scoreMult:1.7, catchBuffer:0, catchArc:0, cloudAlpha:0, orbitSpeed:1.01, lives:1 }
 };
@@ -325,14 +325,26 @@ function blockEncounterForJump(jump) {
 function encounterKindForJump(jump) {
   const plan = RUN.encounterPlan;
   if (!plan) return null;
-  if (!RUN.firstEncounterDone && jump >= plan.firstEncounter && jump <= plan.firstEncounterLastChance) return 'planet';
-  if (plan.earlyPlanets.includes(jump)) return 'planet';
-  if (jump === plan.midPlanet) return 'planet';
-  if (jump === plan.midStar) return 'star';
+  if (RUN.pendingEncounterKind && jump <= RUN.pendingEncounterRetryUntil) {
+    return RUN.pendingEncounterKind;
+  }
+  let planned = null;
+  if (!RUN.firstEncounterDone && jump >= plan.firstEncounter && jump <= plan.firstEncounterLastChance) planned = 'planet';
+  else if (plan.earlyPlanets.includes(jump)) planned = 'planet';
+  else if (jump === plan.midPlanet) planned = 'planet';
+  else if (jump === plan.midStar) planned = 'star';
+  if (planned) {
+    RUN.pendingEncounterKind = planned;
+    RUN.pendingEncounterRetryUntil = jump + (planned === 'star' ? 2 : 3);
+    return planned;
+  }
   const block = blockEncounterForJump(jump);
   if (!block) return null;
   const idx = block.slots.indexOf(jump);
-  return idx >= 0 ? block.kinds[idx] : null;
+  if (idx < 0) return null;
+  RUN.pendingEncounterKind = block.kinds[idx];
+  RUN.pendingEncounterRetryUntil = jump + (RUN.pendingEncounterKind === 'blackhole' ? 1 : 2);
+  return RUN.pendingEncounterKind;
 }
 
 function dayKey() {
@@ -373,6 +385,8 @@ const RUN = {
   jumps: 0,
   lives: 2,
   firstEncounterDone: false,
+  pendingEncounterKind: null,
+  pendingEncounterRetryUntil: 0,
   encounter: null,
   encounterPlan: null,
   encounterBlocks: {},
@@ -401,8 +415,8 @@ const PLANET_MODELS = [
   { name:'Neptune', col:'#5670ff', glow:'#9fb4ff', bands:['#304ac7','#8ca0ff'], ring:false }
 ];
 const ENCOUNTER_TUNING = {
-  planet: { grav:.18, radius:.05, safeDist:.5, shieldable:true, color:'#9fd0ff', field:3.15, visibleField:.78, pathOffset:.12 },
-  star: { grav:.22, radius:.06, safeDist:.58, shieldable:true, color:'#ffd86e', field:3.4, visibleField:.82, pathOffset:.1 },
+  planet: { grav:.24, radius:.05, safeDist:.56, shieldable:true, color:'#9fd0ff', field:3.25, visibleField:.78, pathOffset:.12 },
+  star: { grav:.26, radius:.06, safeDist:.62, shieldable:true, color:'#ffd86e', field:3.48, visibleField:.82, pathOffset:.1 },
   blackhole: { grav:.26, radius:.068, safeDist:.66, shieldable:false, color:'#8c76ff', field:3.85, visibleField:.92, pathOffset:.08 }
 };
 
@@ -667,8 +681,8 @@ function cameraFocusPoint() {
   let fx = cur.x;
   let fy = cur.y;
   if (RUN.encounter && !PL.fly && nxt) {
-    fx = cur.x * .38 + RUN.encounter.x * .24 + nxt.x * .38;
-    fy = cur.y * .38 + RUN.encounter.y * .24 + nxt.y * .38;
+    fx = cur.x * .48 + RUN.encounter.x * .12 + nxt.x * .4;
+    fy = cur.y * .48 + RUN.encounter.y * .12 + nxt.y * .4;
   } else if (routeChoice && !PL.fly) {
     const primary = getPrimaryNode();
     const alt = getAltNode();
@@ -683,7 +697,7 @@ function cameraFocusPoint() {
       fy = cur.y * (1 - mix) + focusY * mix;
     }
   } else if (nxt) {
-    const mix = PL.fly ? .76 : .56;
+    const mix = PL.fly ? .72 : .48;
     fx = cur.x * (1 - mix) + nxt.x * mix;
     fy = cur.y * (1 - mix) + nxt.y * mix;
   }
@@ -694,6 +708,75 @@ function isWorldObjectVisible(x, y, r, camX, camY, margin = 0) {
   const sx = x + camX;
   const sy = y + camY;
   return sx + r + margin >= 0 && sx - r - margin <= W && sy + r + margin >= 0 && sy - r - margin <= H;
+}
+
+function isWorldObjectFullyVisible(x, y, r, camX, camY, margin = 0) {
+  const sx = x + camX;
+  const sy = y + camY;
+  const pad = r + margin;
+  return sx >= pad && sx <= W - pad && sy >= pad && sy <= H - pad;
+}
+
+function clampCameraForLaunchView(camX, camY, cur, nxt, enc = null) {
+  if (!cur) return { x: camX, y: camY };
+  const mn = Math.min(W, H);
+  const entries = [
+    { obj: cur, buffer: mn * .11 },
+    nxt ? { obj: nxt, buffer: mn * .085 } : null,
+    enc ? { obj: enc, buffer: mn * .045 } : null
+  ].filter(Boolean);
+  let minCamX = -Infinity;
+  let maxCamX = Infinity;
+  let minCamY = -Infinity;
+  let maxCamY = Infinity;
+  for (const entry of entries) {
+    const pad = entry.obj.r + entry.buffer;
+    minCamX = Math.max(minCamX, pad - entry.obj.x);
+    maxCamX = Math.min(maxCamX, W - pad - entry.obj.x);
+    minCamY = Math.max(minCamY, pad - entry.obj.y);
+    maxCamY = Math.min(maxCamY, H - pad - entry.obj.y);
+  }
+  if (minCamX <= maxCamX) camX = clamp(camX, minCamX, maxCamX);
+  else {
+    const curPad = cur.r + mn * .11;
+    camX = clamp(camX, curPad - cur.x, W - curPad - cur.x);
+  }
+  if (minCamY <= maxCamY) camY = clamp(camY, minCamY, maxCamY);
+  else {
+    const curPad = cur.r + mn * .11;
+    camY = clamp(camY, curPad - cur.y, H - curPad - cur.y);
+  }
+  return { x: camX, y: camY };
+}
+
+function launchViewFits(cur, nxt, enc = null) {
+  if (!cur || !nxt) return true;
+  const fx = enc
+    ? cur.x * .48 + enc.x * .12 + nxt.x * .4
+    : cur.x * .52 + nxt.x * .48;
+  const fy = enc
+    ? cur.y * .48 + enc.y * .12 + nxt.y * .4
+    : cur.y * .52 + nxt.y * .48;
+  const clampedCam = clampCameraForLaunchView(W / 2 - fx, H / 2 - fy, cur, nxt, enc);
+  const mainBuffer = Math.min(W, H) * .11;
+  const nextBuffer = mainBuffer * .78;
+  if (!isWorldObjectFullyVisible(cur.x, cur.y, cur.r, clampedCam.x, clampedCam.y, mainBuffer)) return false;
+  if (!isWorldObjectFullyVisible(nxt.x, nxt.y, nxt.r, clampedCam.x, clampedCam.y, nextBuffer)) return false;
+  if (enc && !isWorldObjectVisible(enc.x, enc.y, enc.r, clampedCam.x, clampedCam.y, mainBuffer * .35)) return false;
+  const curScreenX = cur.x + clampedCam.x;
+  const curScreenY = cur.y + clampedCam.y;
+  const nextScreenX = nxt.x + clampedCam.x;
+  const nextScreenY = nxt.y + clampedCam.y;
+  const screenGap = Math.hypot(nextScreenX - curScreenX, nextScreenY - curScreenY);
+  const mn = Math.min(W, H);
+  const modeName = currentModeKey();
+  const jump = RUN.jumps;
+  const gapCap = modeName === 'easy'
+    ? mn * (jump < 8 ? .46 : jump < 16 ? .58 : jump < 26 ? .68 : .76)
+    : modeName === 'medium'
+      ? mn * (jump < 8 ? .56 : jump < 18 ? .7 : jump < 28 ? .82 : .92)
+      : mn * (jump < 6 ? .62 : jump < 16 ? .78 : jump < 26 ? .92 : 1.02);
+  return screenGap <= gapCap;
 }
 
 function getPrimaryNode() {
@@ -789,11 +872,11 @@ function progressionProfile(sc) {
   const mode = currentModeKey();
   const jump = RUN.jumps;
   const comboBoost = clamp((combo - 1) / 6, 0, 1);
-  const randomStart = mode === 'easy' ? 2 : mode === 'medium' ? 8 : 6;
-  const randomFloor = mode === 'easy' ? .12 : mode === 'medium' ? .13 : .2;
-  const randomCeil = mode === 'easy' ? .48 : mode === 'medium' ? .7 : .9;
-  const randomRamp = clamp((jump - randomStart) / (mode === 'easy' ? 24 : mode === 'medium' ? 20 : 16), 0, 1);
-  const randomness = clamp(randomFloor + (randomCeil - randomFloor) * randomRamp + comboBoost * (mode === 'easy' ? .06 : mode === 'medium' ? .1 : .14), 0, .95);
+  const randomStart = mode === 'easy' ? 3 : mode === 'medium' ? 2 : 1;
+  const randomFloor = mode === 'easy' ? .1 : mode === 'medium' ? .18 : .26;
+  const randomCeil = mode === 'easy' ? .78 : mode === 'medium' ? .88 : .96;
+  const randomRamp = clamp((jump - randomStart) / (mode === 'easy' ? 24 : mode === 'medium' ? 18 : 14), 0, 1);
+  const randomness = clamp(randomFloor + (randomCeil - randomFloor) * randomRamp + comboBoost * (mode === 'easy' ? .08 : mode === 'medium' ? .12 : .16), 0, .98);
   const orbitMoveStart = mode === 'easy' ? 18 : mode === 'medium' ? 14 : 10;
   const orbitMoveRamp = clamp((jump - orbitMoveStart) / (mode === 'easy' ? 20 : mode === 'medium' ? 16 : 13), 0, 1);
   const orbitMove = jump >= orbitMoveStart ? clamp(orbitMoveRamp + comboBoost * .22, 0, 1) : 0;
@@ -838,38 +921,51 @@ function forwardProgressionOkay(prev, x, y, heading, minDot = 0) {
 
 function pairVisibleInView(cur, nextX, nextY, nextR) {
   if (!cur) return true;
-  const mix = .56;
-  const fx = cur.x * (1 - mix) + nextX * mix;
-  const fy = cur.y * (1 - mix) + nextY * mix;
-  const camX = W / 2 - fx;
-  const camY = H / 2 - fy;
-  const buffer = Math.min(W, H) * .12;
-  const curScreenX = cur.x + camX;
-  const curScreenY = cur.y + camY;
-  const nextScreenX = nextX + camX;
-  const nextScreenY = nextY + camY;
-  const curPad = cur.r + buffer;
-  const nextPad = nextR + buffer;
-  return curScreenX >= curPad
-    && curScreenX <= W - curPad
-    && curScreenY >= curPad
-    && curScreenY <= H - curPad
-    && nextScreenX >= nextPad
-    && nextScreenX <= W - nextPad
-    && nextScreenY >= nextPad
-    && nextScreenY <= H - nextPad;
+  return launchViewFits(cur, { x: nextX, y: nextY, r: nextR });
 }
 
-function travelTurnBias(sc, randomness) {
-  const mode = currentModeKey();
+function spawnGapCap(cur, nextR, blockers = []) {
+  if (!cur) return Infinity;
+  const mn = Math.min(W, H);
+  const modeName = currentModeKey();
   const jump = RUN.jumps;
-  const segmentSpan = mode === 'easy' ? 3 : mode === 'medium' ? 2 : 2;
-  const segment = Math.floor((jump + sc) / segmentSpan);
-  const seedWave = Math.sin(segment * 1.931 + (RUN.seed % 8192) * .0013);
-  const turnChoices = [-.56, -.34, -.18, .18, .34, .56];
-  const snapped = turnChoices[Math.floor(((seedWave * .5 + .5) * turnChoices.length)) % turnChoices.length];
-  const amp = 1 + randomness * (mode === 'easy' ? .12 : mode === 'medium' ? .18 : .24);
-  return snapped * Math.PI * amp;
+  const baseCap = modeName === 'easy'
+    ? mn * (jump < 10 ? .34 : jump < 20 ? .48 : .62)
+    : modeName === 'medium'
+      ? mn * (jump < 8 ? .4 : jump < 18 ? .58 : .74)
+      : mn * (jump < 6 ? .46 : jump < 16 ? .68 : .86);
+  const frameCap = Math.max(cur.r + nextR + mn * .12, mn - (mn * .17 * 2) - cur.r - nextR);
+  const encounterBlocker = blockers.find(b => b && (b.fieldR || b.kind));
+  const encounterCap = encounterBlocker ? baseCap * .82 : Infinity;
+  return Math.max(cur.r + nextR + mn * .15, Math.min(baseCap, frameCap, encounterCap));
+}
+
+function encounterFrameVisible(cur, nxt, enc) {
+  return launchViewFits(cur, nxt, enc);
+}
+
+function nextFlowState(prev, forcedDir = null) {
+  if (forcedDir !== null && forcedDir !== undefined) {
+    return { heading: forcedDir, left: 2 };
+  }
+  const mode = currentModeKey();
+  const baseHeading = prev?._flowDir ?? prev?._tDir ?? 0;
+  const left = prev?._flowLeft ?? 0;
+  if (left > 0) return { heading: baseHeading, left: left - 1 };
+  const prog = progressionProfile(score + 1);
+  const segMin = mode === 'easy' ? 2 : 1;
+  const segMax = mode === 'easy' ? 4 : mode === 'medium' ? 3 : 2;
+  const keepStraight = Math.random() < (mode === 'easy' ? .42 - prog.randomness * .16 : mode === 'medium' ? .28 : .2);
+  const turnOptions = mode === 'easy'
+    ? [-Math.PI / 3, -Math.PI / 4, 0, Math.PI / 4, Math.PI / 3]
+    : mode === 'medium'
+      ? [-Math.PI / 2, -Math.PI / 3, -Math.PI / 4, 0, Math.PI / 4, Math.PI / 3, Math.PI / 2]
+      : [-Math.PI / 2, -Math.PI / 3, -Math.PI / 4, 0, Math.PI / 4, Math.PI / 3, Math.PI / 2];
+  const turn = keepStraight ? 0 : turnOptions[Math.floor(Math.random() * turnOptions.length)];
+  return {
+    heading: baseHeading + turn,
+    left: segMin + Math.floor(Math.random() * (segMax - segMin + 1)) - 1
+  };
 }
 
 function nodeParams(sc) {
@@ -882,29 +978,44 @@ function nodeParams(sc) {
   const beat = sc % 8;
   const relief = beat === 7;
   const breather = beat === 3 || beat === 5;
+  const easyGentle = modeName === 'easy' && sc < 20;
   const sizeRand = Math.random() - .5;
   const sizeVar = (sc < 8 ? .019 : .014) + prog.randomness * .028;
   let r = breather
     ? mn * (.068 + Math.random() * (.008 + prog.randomness * .022))
     : mn * Math.max(.04, .084 - d * .036) + sizeRand * mn * sizeVar;
+  if (easyGentle) r *= 1.08;
   if (relief) r = mn * (.09 + Math.random() * (.014 + prog.randomness * .024));
   let dist = relief
-    ? mn * (.46 + prog.randomness * .04 + Math.random() * (.02 + prog.randomness * .05))
-    : mn * (.54 + d * .08 + Math.random() * (.02 + prog.randomness * .1));
+    ? mn * (.41 + prog.randomness * .08 + Math.random() * (.02 + prog.randomness * .08))
+    : mn * (.45 + d * .08 + Math.random() * (.03 + prog.randomness * .16));
   const earlyRun = sc < 8;
-  if (earlyRun) dist = mn * (.49 + Math.random() * .045);
+  const easySoftStart = modeName === 'easy' && sc < 14;
+  if (earlyRun) dist = mn * (.405 + Math.random() * .065);
+  else if (easySoftStart) dist = mn * (.4 + Math.random() * .085);
+  else if (easyGentle) dist = mn * (.43 + Math.random() * .09);
   if (RUN.variant === 'prism drift') dist *= 1.08;
   if (RUN.variant === 'solar lash') dist *= .96;
-  dist = clamp(dist, mn * (earlyRun ? .48 : .47), mn * (earlyRun ? .56 : .7));
-  const spdBase = (.041 + d * .05) * .96;
+  const minDist = modeName === 'easy'
+    ? mn * (earlyRun ? .385 : easySoftStart ? .4 : easyGentle ? .41 : .42)
+    : modeName === 'medium'
+      ? mn * (earlyRun ? .41 : .44)
+      : mn * (earlyRun ? .43 : .46);
+  const maxDist = modeName === 'easy'
+    ? mn * (earlyRun ? .515 : easySoftStart ? .56 : easyGentle ? .58 : .64)
+    : modeName === 'medium'
+      ? mn * (earlyRun ? .54 : .7)
+      : mn * (earlyRun ? .58 : .78);
+  dist = clamp(dist, minDist, maxDist);
+  const spdBase = ((.041 + d * .05) * .96) * (easyGentle ? .9 : 1);
   const spdMul = earlyRun
     ? 1 + Math.random() * (.12 + prog.randomness * .18)
-    : 1 + Math.random() * (.24 + prog.randomness * .82);
+    : 1 + Math.random() * (easyGentle ? (.16 + prog.randomness * .38) : (.24 + prog.randomness * .82));
   const spd = spdBase * spdMul * modeCfg.orbitSpeed * (Math.random() < .5 ? 1 : -1);
-  const launchBase = 7.1 + d * 2.9;
+  const launchBase = (7.1 + d * 2.9) * (easyGentle ? .92 : 1);
   const launchMul = earlyRun
     ? 1 + Math.random() * (.12 + prog.randomness * .16)
-    : 1 + Math.random() * (.22 + prog.randomness * .56);
+    : 1 + Math.random() * (easyGentle ? (.16 + prog.randomness * .32) : (.22 + prog.randomness * .56));
   const launch = launchBase * launchMul;
   const capArc = relief ? Math.PI * .78 : Math.PI * Math.max(.18, .64 - d * .42);
   const synced = sc >= syncStart && !relief && Math.random() < Math.min(.82, (sc - syncStart) / 34);
@@ -919,16 +1030,26 @@ function genNode(prev, sc, forcedDir = null, blockers = []) {
   const kindMeta = assignNodeKind(sc);
   const mn = Math.min(W, H);
   let x, y;
+  let flowHeading = forcedDir ?? 0;
+  let flowLeft = 0;
   if (!prev) {
     x = W * (.3 + Math.random() * .4);
     y = H * (.3 + Math.random() * .4);
   } else {
-    const baseForward = forcedDir ?? (prev._tDir || 0);
-    const forward = baseForward + travelTurnBias(sc, p.randomness);
-    const turnSpread = Math.PI * (.18 + p.randomness * (save.launchMode === 'easy' ? .2 : save.launchMode === 'medium' ? .28 : .36));
+    const flow = nextFlowState(prev, forcedDir);
+    const forward = flow.heading;
+    flowHeading = flow.heading;
+    flowLeft = flow.left;
+    const turnSpread = Math.PI * (save.launchMode === 'easy'
+      ? (.08 + p.randomness * .1)
+      : save.launchMode === 'medium'
+        ? (.11 + p.randomness * .14)
+        : (.14 + p.randomness * .18));
     const minGap = prev.r + p.r + mn * .15;
-    const maxGap = Math.max(minGap + mn * .08, p.dist * 1.14);
+    const hardGapCap = spawnGapCap(prev, p.r, blockers);
+    const maxGap = Math.min(hardGapCap, Math.max(minGap + mn * .08, p.dist * 1.14));
     const minForwardDot = mn * .08;
+    const encounterBlocker = blockers.find(b => b && (b.fieldR || b.kind));
     let placed = false;
     const anglePasses = [turnSpread, turnSpread * .7, turnSpread * .45];
     for (const spread of anglePasses) {
@@ -940,6 +1061,10 @@ function genNode(prev, sc, forcedDir = null, blockers = []) {
         const gap = Math.hypot(cx - prev.x, cy - prev.y);
         if (gap < minGap || gap > maxGap) continue;
         if (!forwardProgressionOkay(prev, cx, cy, forward, minForwardDot)) continue;
+        if (encounterBlocker) {
+          const awayDot = (cx - prev.x) * (prev.x - encounterBlocker.x) + (cy - prev.y) * (prev.y - encounterBlocker.y);
+          if (awayDot <= mn * mn * .004) continue;
+        }
         if (!pairVisibleInView(prev, cx, cy, p.r)) continue;
         if (!orbitSpawnClearance(cx, cy, p.r, prev, blockers)) continue;
         x = cx;
@@ -957,6 +1082,10 @@ function genNode(prev, sc, forcedDir = null, blockers = []) {
           const cx = prev.x + Math.cos(a) * fallbackDist;
           const cy = prev.y + Math.sin(a) * fallbackDist;
           if (!forwardProgressionOkay(prev, cx, cy, forward, minForwardDot)) continue;
+          if (encounterBlocker) {
+            const awayDot = (cx - prev.x) * (prev.x - encounterBlocker.x) + (cy - prev.y) * (prev.y - encounterBlocker.y);
+            if (awayDot <= mn * mn * .004) continue;
+          }
           if (!pairVisibleInView(prev, cx, cy, p.r)) continue;
           if (!orbitSpawnClearance(cx, cy, p.r, prev, blockers)) continue;
           x = cx;
@@ -969,21 +1098,45 @@ function genNode(prev, sc, forcedDir = null, blockers = []) {
     }
     if (!placed) {
       let fallbackDist = Math.max(maxGap + mn * .08, p.dist + mn * .12);
-      const a = forward;
-      while (!placed) {
-        const cx = prev.x + Math.cos(a) * fallbackDist;
-        const cy = prev.y + Math.sin(a) * fallbackDist;
-        if (forwardProgressionOkay(prev, cx, cy, forward, minForwardDot)
-          && pairVisibleInView(prev, cx, cy, p.r)
-          && orbitSpawnClearance(cx, cy, p.r, prev, blockers)) {
+      const finalAngles = [0, .08, -.08, .16, -.16, .24, -.24].map(off => forward + off * Math.PI);
+      for (let tries = 0; tries < 18 && !placed; tries++) {
+        for (const a of finalAngles) {
+          const cx = prev.x + Math.cos(a) * fallbackDist;
+          const cy = prev.y + Math.sin(a) * fallbackDist;
+          if (!forwardProgressionOkay(prev, cx, cy, forward, minForwardDot)) continue;
+          if (encounterBlocker) {
+            const awayDot = (cx - prev.x) * (prev.x - encounterBlocker.x) + (cy - prev.y) * (prev.y - encounterBlocker.y);
+            if (awayDot <= mn * mn * .004) continue;
+          }
+          if (!pairVisibleInView(prev, cx, cy, p.r)) continue;
+          if (!orbitSpawnClearance(cx, cy, p.r, prev, blockers)) continue;
           x = cx;
           y = cy;
           prev._tDir = a;
           placed = true;
           break;
         }
-        fallbackDist += mn * .08;
+        fallbackDist += mn * .04;
       }
+    }
+    const emergencyDist = Math.min(maxGap, minGap + mn * .06);
+    if (!placed) {
+      const emergencyAngles = [0, .12, -.12, .22, -.22, .32, -.32].map(off => forward + off * Math.PI);
+      for (const a of emergencyAngles) {
+        const cx = prev.x + Math.cos(a) * emergencyDist;
+        const cy = prev.y + Math.sin(a) * emergencyDist;
+        if (!orbitSpawnClearance(cx, cy, p.r, prev, [])) continue;
+        x = cx;
+        y = cy;
+        prev._tDir = a;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      x = prev.x + Math.cos(forward) * emergencyDist;
+      y = prev.y + Math.sin(forward) * emergencyDist;
+      prev._tDir = forward;
     }
   }
 
@@ -1015,7 +1168,9 @@ function genNode(prev, sc, forcedDir = null, blockers = []) {
     moveRate: p.moveRate,
     movePhase: Math.random() * Math.PI * 2,
     moveTilt: Math.random() * Math.PI * 2,
-    _tDir: 0
+    _tDir: 0,
+    _flowDir: flowHeading,
+    _flowLeft: flowLeft
   };
   if (prev) {
     const approachAngle = Math.atan2(prev.y - y, prev.x - x);
@@ -1080,6 +1235,58 @@ function getNextNode() {
 function getAltNode() {
   return routeChoice ? routeChoice.alt : null;
 }
+
+function ensurePlayableNextNode(sc = score, opts = {}) {
+  const cur = pool[pidx];
+  if (!cur) return false;
+  const blockers = opts.blockers || [];
+  const forcedDir = opts.forcedDir ?? (cur._tDir || 0);
+  for (let i = 0; i < 12; i++) {
+    const nxt = pool[pidx + 1];
+    if (nxt && launchViewFits(cur, nxt, RUN.encounter) && orbitSpawnClearance(nxt.x, nxt.y, nxt.r, cur, blockers)) {
+      fill(sc, { forcedDir, blockers });
+      return true;
+    }
+    pool[pidx + 1] = genNode(cur, sc + 1 + i * .18, forcedDir, blockers);
+  }
+  const nxt = pool[pidx + 1];
+  if (!nxt) return false;
+  fill(sc, { forcedDir, blockers });
+  return launchViewFits(cur, nxt, RUN.encounter);
+}
+
+function fulfillPendingEncounter(sc = score, opts = {}) {
+  if (!RUN.pendingEncounterKind || routeChoice) return !!RUN.encounter;
+  const cur = pool[pidx];
+  if (!cur) return false;
+  const blockers = opts.blockers || [];
+  const forcedDir = opts.forcedDir ?? (cur._tDir || 0);
+  const mn = Math.min(W, H);
+  const tune = ENCOUNTER_TUNING[RUN.pendingEncounterKind];
+  for (let i = 0; i < 16 && !RUN.encounter; i++) {
+    pool[pidx + 1] = genNode(cur, sc + 1 + i * .22, forcedDir, blockers);
+    if (pool[pidx + 1] && tune) {
+      const nxt = pool[pidx + 1];
+      const dx = nxt.x - cur.x;
+      const dy = nxt.y - cur.y;
+      const gap = Math.hypot(dx, dy) || 1;
+      const targetMin = mn * Math.max(.54, tune.safeDist - .02);
+      const targetMax = mn * .76;
+      if (gap < targetMin || gap > targetMax) {
+        const scale = clamp(gap < targetMin ? targetMin / gap : targetMax / gap, .82, 1.22);
+        nxt.x = cur.x + dx * scale;
+        nxt.y = cur.y + dy * scale;
+        nxt.baseX = nxt.x;
+        nxt.baseY = nxt.y;
+      }
+    }
+    fill(sc, { forcedDir, blockers });
+    if (!launchViewFits(cur, pool[pidx + 1], RUN.encounter)) continue;
+    maybeSpawnEncounter();
+  }
+  return !!RUN.encounter;
+}
+
 function maybeSpawnRouteFork() {
   if (routeChoice || score < 8 || RUN.jumps < 7 || score % RUN.forkModulo !== 0) return;
   const current = pool[pidx];
@@ -1135,19 +1342,13 @@ function setRouteSelection(index, opts = {}) {
 }
 
 function archiveEncounter(enc) {
-  if (!enc) return;
-  encounterTrail.push({
-    ...enc,
-    px: enc.px ?? enc.x,
-    py: enc.py ?? enc.y,
-    keepUntilJump: RUN.jumps + 2,
-    fade: 1
-  });
+  return;
 }
 
 function clearEncounter(preserve = false) {
   if (preserve && RUN.encounter) archiveEncounter(RUN.encounter);
   RUN.encounter = null;
+  encounterTrail = [];
 }
 
 function maybeSpawnEncounter() {
@@ -1168,8 +1369,8 @@ function maybeSpawnEncounter() {
   const dx = nxt.x - cur.x;
   const dy = nxt.y - cur.y;
   const dist = Math.hypot(dx, dy) || 1;
-  const minDist = mn * (isTeachEncounter ? Math.max(.44, tune.safeDist - .08) : tune.safeDist);
-  const maxDist = mn * (isTeachEncounter ? .66 : .72);
+  const minDist = mn * (isTeachEncounter ? Math.max(.54, tune.safeDist - .02) : tune.safeDist);
+  const maxDist = mn * (isTeachEncounter ? .68 : .76);
   if (dist < minDist || dist > maxDist) return;
   const nx = -dy / dist;
   const ny = dx / dist;
@@ -1182,13 +1383,14 @@ function maybeSpawnEncounter() {
   const fieldR = bodyR * tune.field;
   const visibleFieldR = fieldR * tune.visibleField;
   const bodyPad = mn * (isTeachEncounter ? .046 : kind === 'blackhole' ? .075 : kind === 'star' ? .068 : .058);
-  const minGoalClear = nxt.r + bodyR + bodyPad;
-  const minCurrentClear = cur.r + bodyR + bodyPad * .7;
-  const offsetBase = Math.max(bodyR * (isTeachEncounter ? .9 : 1.2), dist * (isTeachEncounter ? Math.max(.05, tune.pathOffset - .04) : tune.pathOffset));
+  const fieldClear = fieldR * (isTeachEncounter ? .42 : kind === 'blackhole' ? .56 : kind === 'star' ? .5 : .46);
+  const minGoalClear = nxt.r + Math.max(bodyR + bodyPad, fieldClear);
+  const minCurrentClear = cur.r + Math.max(bodyR + bodyPad * .7, fieldClear * .9);
+  const offsetBase = Math.max(bodyR * (isTeachEncounter ? .78 : 1.12), dist * (isTeachEncounter ? Math.max(.034, tune.pathOffset - .06) : Math.max(.07, tune.pathOffset - .02)));
   let bodyX = null;
   let bodyY = null;
   const sideOrder = Math.random() < .5 ? [-1, 1] : [1, -1];
-  const offsetScales = isTeachEncounter ? [1, 1.08, 1.16] : [1, 1.15, 1.3];
+  const offsetScales = isTeachEncounter ? [1, 1.04, 1.09] : [1, 1.15, 1.3];
   for (const scale of offsetScales) {
     for (const side of sideOrder) {
       const candidateX = midX + nx * offsetBase * scale * side;
@@ -1219,7 +1421,7 @@ function maybeSpawnEncounter() {
     r: bodyR,
     fieldR,
     visibleFieldR,
-    mass: tune.grav * (isTeachEncounter ? 2.2 : 1.35),
+    mass: tune.grav * (isTeachEncounter ? 3.4 : kind === 'planet' ? 2.05 : kind === 'star' ? 1.75 : 1.35),
     teach: isTeachEncounter,
     rot: Math.random() * Math.PI * 2,
     spin: (kind === 'blackhole' ? .07 : kind === 'star' ? .03 : .018) * (Math.random() < .5 ? 1 : -1),
@@ -1232,7 +1434,7 @@ function maybeSpawnEncounter() {
     movePhase: Math.random() * Math.PI * 2
   };
   let routeCheck = chooseEncounterTrajectory(cur, nxt, RUN.encounter, save.launchMode);
-  const teachFieldLimit = isTeachEncounter ? .96 : (kind === 'blackhole' ? 1.3 : 1.1);
+  const teachFieldLimit = isTeachEncounter ? .76 : (kind === 'blackhole' ? 1.3 : 1.1);
   if (!routeCheck?.ok || routeCheck.minFieldRatio > teachFieldLimit) {
     cur.spd *= -1;
     nxt.spd *= -1;
@@ -1244,7 +1446,13 @@ function maybeSpawnEncounter() {
     clearEncounter();
     return;
   }
+  if (!encounterFrameVisible(cur, nxt, RUN.encounter)) {
+    clearEncounter();
+    return;
+  }
   if (isTeachEncounter) RUN.firstEncounterDone = true;
+  RUN.pendingEncounterKind = null;
+  RUN.pendingEncounterRetryUntil = 0;
   if (save.launchMode === 'easy') RUN.encounter.guide = chooseEncounterTrajectory(cur, nxt, RUN.encounter, 'easy', true);
 }
 
@@ -1325,8 +1533,20 @@ function updateCam() {
   const { fx, fy } = focus;
   CAM.tx = W / 2 - fx;
   CAM.ty = H / 2 - fy;
+  const cur = pool[pidx];
+  const nxt = getNextNode();
+  if (!PL.fly && cur) {
+    const clampedTarget = clampCameraForLaunchView(CAM.tx, CAM.ty, cur, nxt, RUN.encounter);
+    CAM.tx = clampedTarget.x;
+    CAM.ty = clampedTarget.y;
+  }
   CAM.x += (CAM.tx - CAM.x) * .12;
   CAM.y += (CAM.ty - CAM.y) * .12;
+  if (!PL.fly && cur) {
+    const clampedActual = clampCameraForLaunchView(CAM.x, CAM.y, cur, nxt, RUN.encounter);
+    CAM.x = clampedActual.x;
+    CAM.y = clampedActual.y;
+  }
 }
 
 function burst(x, y, col, n, spd) {
@@ -1726,11 +1946,23 @@ function drawEncounterBody(enc) {
   const ey = lerp(enc.py ?? enc.y, enc.y, renderAlpha);
   cx.save();
   cx.translate(ex, ey);
+  const ghost = !!enc.ghost;
   const fieldR = enc.fieldR || enc.r * 2.4;
   const visibleFieldR = enc.visibleFieldR || fieldR * .82;
   const pulse = .992 + Math.sin(enc.pulse) * .01;
   const fieldStroke = enc.kind === 'blackhole' ? '#7c6cff' : enc.kind === 'star' ? '#e5b85b' : '#7fbdf0';
-  cx.globalAlpha = enc.kind === 'blackhole' ? .2 : .14;
+  if (ghost) {
+    cx.globalAlpha = .08;
+    cx.strokeStyle = fieldStroke;
+    cx.lineWidth = .9;
+    cx.setLineDash(enc.kind === 'blackhole' ? [5, 9] : [6, 10]);
+    cx.beginPath();
+    cx.arc(0, 0, visibleFieldR * pulse, 0, Math.PI * 2);
+    cx.stroke();
+    cx.restore();
+    return;
+  }
+  cx.globalAlpha = ghost ? .05 : enc.kind === 'blackhole' ? .2 : .14;
   cx.strokeStyle = fieldStroke;
   cx.lineWidth = 1.05;
   cx.setLineDash(enc.kind === 'blackhole' ? [6, 8] : [7, 9]);
@@ -1754,7 +1986,7 @@ function drawEncounterBody(enc) {
     fieldGlow.addColorStop(.72, 'rgba(127,189,240,.035)');
     fieldGlow.addColorStop(1, 'rgba(127,189,240,0)');
   }
-  cx.globalAlpha = .85;
+  cx.globalAlpha = ghost ? .14 : .85;
   cx.fillStyle = fieldGlow;
   cx.beginPath();
   cx.arc(0, 0, visibleFieldR * 1.02, 0, Math.PI * 2);
@@ -1767,12 +1999,12 @@ function drawEncounterBody(enc) {
     disk.addColorStop(.52, 'rgba(255,154,72,.22)');
     disk.addColorStop(1, 'rgba(0,0,0,0)');
     cx.rotate(enc.rot);
-    cx.globalAlpha = .95;
+    cx.globalAlpha = ghost ? .18 : .95;
     cx.fillStyle = disk;
     cx.beginPath();
     cx.ellipse(0, 0, enc.r * 2.2, enc.r * 1.2, .24, 0, Math.PI * 2);
     cx.fill();
-    cx.globalAlpha = .28 + .08 * Math.sin(enc.pulse);
+    cx.globalAlpha = ghost ? .08 : .28 + .08 * Math.sin(enc.pulse);
     cx.strokeStyle = '#7b68ff';
     cx.lineWidth = 2.2;
     cx.shadowColor = '#9c89ff';
@@ -1794,14 +2026,14 @@ function drawEncounterBody(enc) {
     g.addColorStop(.26, '#ffd86e');
     g.addColorStop(.62, '#ff9d4d66');
     g.addColorStop(1, 'rgba(0,0,0,0)');
-    cx.globalAlpha = .9;
+    cx.globalAlpha = ghost ? .18 : .9;
     cx.fillStyle = g;
     cx.beginPath();
     cx.arc(0, 0, enc.r * 2.8, 0, Math.PI * 2);
     cx.fill();
     cx.rotate(enc.rot);
     for (let i = 0; i < 10; i++) {
-      cx.globalAlpha = .16 + Math.sin(enc.pulse + i) * .04;
+      cx.globalAlpha = ghost ? .05 : .16 + Math.sin(enc.pulse + i) * .04;
       cx.strokeStyle = i % 2 ? '#ffd86e' : '#fff7b5';
       cx.lineWidth = 2 + (i % 3);
       cx.beginPath();
@@ -1823,7 +2055,7 @@ function drawEncounterBody(enc) {
   g.addColorStop(0, m.glow + 'dd');
   g.addColorStop(.36, m.col + 'bb');
   g.addColorStop(1, 'rgba(0,0,0,0)');
-  cx.globalAlpha = .78;
+  cx.globalAlpha = ghost ? .18 : .78;
   cx.fillStyle = g;
   cx.beginPath();
   cx.arc(0, 0, enc.r * 2.3, 0, Math.PI * 2);
@@ -1950,8 +2182,10 @@ function sampleLaunchState(node, launchDelay = 0) {
   };
 }
 function encounterPull(enc, ed) {
-  const fieldFactor = ed < enc.fieldR ? 1 + (1 - ed / enc.fieldR) * (enc.kind === 'blackhole' ? 1.5 : 1.45) : 1;
-  return (enc.mass * fieldFactor) / ((ed * .014) * (ed * .014) + 10);
+  const teachBoost = enc.teach ? 1.55 : 1;
+  const normalBoost = enc.kind === 'planet' ? 1.6 : enc.kind === 'star' ? 1.28 : 1;
+  const fieldFactor = ed < enc.fieldR ? 1 + (1 - ed / enc.fieldR) * (enc.kind === 'blackhole' ? 1.5 : enc.teach ? 2.1 : enc.kind === 'planet' ? 2.15 : 1.75) : 1;
+  return (enc.mass * fieldFactor * teachBoost * normalBoost) / ((ed * .014) * (ed * .014) + 10);
 }
 function traceEncounterLaunch(node, nxt, enc, launchDelay = 0, keepPoints = false) {
   const state = sampleLaunchState(node, launchDelay);
@@ -1966,7 +2200,8 @@ function traceEncounterLaunch(node, nxt, enc, launchDelay = 0, keepPoints = fals
     const dx = nxt.x - x;
     const dy = nxt.y - y;
     const d = Math.hypot(dx, dy) || .001;
-    const g = 0.0011 / (d * .0006 + .03);
+    const targetScale = enc ? (enc.teach ? .54 : enc.kind === 'planet' ? .66 : enc.kind === 'star' ? .72 : .8) : 1;
+    const g = (0.0011 / (d * .0006 + .03)) * targetScale;
     vx += (dx / d) * g;
     vy += (dy / d) * g;
     if (enc) {
@@ -2287,7 +2522,7 @@ function draw() {
     cx.translate(camX, camY);
     for (const enc of encounterTrail) {
       cx.save();
-      cx.globalAlpha = Math.max(0, Math.min(1, enc.fade)) * .72;
+      cx.globalAlpha = Math.max(0, Math.min(1, enc.fade)) * .16;
       drawEncounterBody(enc);
       cx.restore();
     }
@@ -2301,8 +2536,7 @@ function draw() {
       drawNode(oldNode, -1);
       cx.restore();
     }
-    for (let ri = 2; ri >= 0; ri--) {
-      if (routeChoice && ri === 1) continue;
+    for (let ri = 1; ri >= 0; ri--) {
       const node = pool[pidx + ri];
       if (node) drawNode(node, ri);
     }
@@ -2338,11 +2572,20 @@ function draw() {
         const ax = playerX + tx * len;
         const ay = playerY + ty * len;
         cx.save();
-        cx.globalAlpha = .22 + .1 * Math.sin(simTime * 5.5);
-        cx.setLineDash([3, 4]);
+        cx.globalAlpha = .58 + .18 * Math.sin(simTime * 5.5);
+        cx.setLineDash([5, 5]);
+        cx.strokeStyle = '#ffffff';
+        cx.shadowColor = PL.col;
+        cx.shadowBlur = 18;
+        cx.lineWidth = 2.6;
+        cx.lineCap = 'round';
+        cx.beginPath();
+        cx.moveTo(playerX, playerY);
+        cx.lineTo(ax, ay);
+        cx.stroke();
+        cx.globalAlpha = .72;
         cx.strokeStyle = PL.col;
         cx.lineWidth = 1.5;
-        cx.lineCap = 'round';
         cx.beginPath();
         cx.moveTo(playerX, playerY);
         cx.lineTo(ax, ay);
@@ -2351,9 +2594,9 @@ function draw() {
         const ha = Math.atan2(ay - playerY, ax - playerX);
         cx.beginPath();
         cx.moveTo(ax, ay);
-        cx.lineTo(ax - Math.cos(ha - .42) * 8, ay - Math.sin(ha - .42) * 8);
+        cx.lineTo(ax - Math.cos(ha - .42) * 10, ay - Math.sin(ha - .42) * 10);
         cx.moveTo(ax, ay);
-        cx.lineTo(ax - Math.cos(ha + .42) * 8, ay - Math.sin(ha + .42) * 8);
+        cx.lineTo(ax - Math.cos(ha + .42) * 10, ay - Math.sin(ha + .42) * 10);
         cx.stroke();
         cx.restore();
       }
@@ -2681,8 +2924,11 @@ function doCapture(nxt, quality, hitAngle) {
   }
   clearEncounter(true);
   trimPoolWindow();
-  fill(score, encounterExit ? { forcedDir:nxt._tDir, blockers:[encounterExit] } : undefined);
+  const fillOpts = encounterExit ? { forcedDir:nxt._tDir, blockers:[encounterExit] } : undefined;
+  fill(score, fillOpts);
   RUN.jumps++;
+  ensurePlayableNextNode(score, fillOpts);
+  if (RUN.pendingEncounterKind && !routeChoice) fulfillPendingEncounter(score, fillOpts);
 
   combo++;
   comboTimer = COMBO_TIMER_BASE;
@@ -2709,6 +2955,8 @@ function doCapture(nxt, quality, hitAngle) {
       maybeSpawnEncounter();
     }
   }
+  if (!routeChoice) ensurePlayableNextNode(score, fillOpts);
+  if (!routeChoice && RUN.pendingEncounterKind && !RUN.encounter) fulfillPendingEncounter(score, fillOpts);
   updateStatusHUD();
   Music.onCapture({ kind:nxt.kind, combo, perfect:quality.perfect, fever:RUN.feverTimer > 0 });
   clearTimeout(unlockTimeout);
@@ -2791,6 +3039,14 @@ function update(dt) {
 
   const cur = pool[pidx];
   const nxt = getNextNode();
+  if (!PL.fly && cur && (!nxt || !launchViewFits(cur, nxt, RUN.encounter))) {
+    const blockerOpts = RUN.encounter
+      ? { forcedDir: cur._tDir, blockers: [{ x: RUN.encounter.x, y: RUN.encounter.y, r: RUN.encounter.r, fieldR: RUN.encounter.fieldR, kind: RUN.encounter.kind }] }
+      : { forcedDir: cur._tDir };
+    if (RUN.encounter && !launchViewFits(cur, nxt, RUN.encounter)) clearEncounter(true);
+    ensurePlayableNextNode(score, blockerOpts);
+    if (RUN.pendingEncounterKind && !RUN.encounter) fulfillPendingEncounter(score, blockerOpts);
+  }
   const nodeStart = Math.max(0, pidx - 1);
   const nodeEnd = Math.min(pool.length, pidx + 4);
   for (let i = nodeStart; i < nodeEnd; i++) {
@@ -2857,7 +3113,9 @@ function update(dt) {
       const dx = nxt.x - PL.x;
       const dy = nxt.y - PL.y;
       const d = Math.hypot(dx, dy) || .001;
-      const g = 0.0011 / (d * .0006 + .03);
+      const activeEncounter = RUN.encounter;
+      const targetScale = activeEncounter ? (activeEncounter.teach ? .54 : activeEncounter.kind === 'planet' ? .66 : activeEncounter.kind === 'star' ? .72 : .8) : 1;
+      const g = (0.0011 / (d * .0006 + .03)) * targetScale;
       PL.vx += (dx / d) * g;
       PL.vy += (dy / d) * g;
     }
@@ -2871,7 +3129,7 @@ function update(dt) {
       PL.vy += (ey / ed) * pull;
       const hitRadius = hz.kind === 'blackhole'
         ? hz.r + PL.r * .55
-        : hz.r * .78 + PL.r * .45;
+        : hz.r * .56 + PL.r * .24;
       if (ed < hitRadius) {
         if (hz.kind === 'blackhole') {
           doFail('blackhole', { bypassShield:true, bypassLife:true });
@@ -3143,25 +3401,30 @@ const Music = (() => {
     if (!state.unlocked || !state.ctx) return;
     const targetMood = GS === 'title' || GS === 'over' ? 'title' : 'play';
     state.mood = targetMood;
-    state.beatLen = RUN.feverTimer > 0 ? 60 / 142 / 2 : GS === 'play' ? 60 / (114 + Math.min(combo * 5, 28)) / 2 : 60 / 102 / 2;
-    state.filter.frequency.setTargetAtTime(RUN.feverTimer > 0 ? 2800 : GS === 'play' ? 1850 : 1100, state.ctx.currentTime, .08);
-    const padTarget = GS === 'play' ? (.12 + Math.min(.05, combo * .01) + (RUN.feverTimer > 0 ? .08 : 0)) : .08;
+    const chain = Math.max(0, combo - 1);
+    const comboTempo = Math.min(chain, 6) * 5 + Math.max(0, chain - 6) * 2.2;
+    const feverTempo = Math.max(0, chain - 4) * 1.5;
+    state.beatLen = RUN.feverTimer > 0 ? 60 / (142 + Math.min(feverTempo, 10)) / 2 : GS === 'play' ? 60 / (114 + comboTempo) / 2 : 60 / 102 / 2;
+    state.filter.frequency.setTargetAtTime(RUN.feverTimer > 0 ? 2920 : GS === 'play' ? 1850 + Math.min(Math.max(0, chain - 3) * 120, 520) : 1100, state.ctx.currentTime, .08);
+    const padTarget = GS === 'play' ? (.12 + Math.min(.05, combo * .01) + Math.min(.03, Math.max(0, chain - 3) * .005) + (RUN.feverTimer > 0 ? .08 : 0)) : .08;
     const chord = progressions[state.chord % progressions.length];
     state.pads.forEach((voice, i) => {
       const note = chord[i === 0 ? 0 : 2] + (GS === 'play' ? 0 : -12);
       voice.osc.frequency.setTargetAtTime(midiToHz(note), state.ctx.currentTime, .24);
       voice.amp.gain.setTargetAtTime(voice.gain * (GS === 'play' ? 1 : .75), state.ctx.currentTime, .24);
     });
-    const wave = .5 + .5 * Math.sin(state.ctx.currentTime * (RUN.feverTimer > 0 ? 8.8 : GS === 'play' ? 6.9 : 4.8));
-    const bassBase = RUN.feverTimer > 0 ? 1520 : GS === 'play' ? 1040 : 800;
-    state.padFilter.frequency.setTargetAtTime(bassBase + wave * (RUN.feverTimer > 0 ? 700 : 420), state.ctx.currentTime, .1);
-    state.padBus.gain.setTargetAtTime(padTarget + wave * (GS === 'play' ? .026 : .012), state.ctx.currentTime, .14);
+    const wave = .5 + .5 * Math.sin(state.ctx.currentTime * (RUN.feverTimer > 0 ? 8.9 : GS === 'play' ? 6.9 + Math.min(chain * .18, 1.2) : 4.8));
+    const bassBase = RUN.feverTimer > 0 ? 1560 : GS === 'play' ? 1040 + Math.min(Math.max(0, chain - 2) * 58, 260) : 800;
+    state.padFilter.frequency.setTargetAtTime(bassBase + wave * (RUN.feverTimer > 0 ? 760 : 420 + Math.min(Math.max(0, chain - 2) * 42, 180)), state.ctx.currentTime, .1);
+    state.padBus.gain.setTargetAtTime(padTarget + wave * (GS === 'play' ? .026 + Math.min(Math.max(0, chain - 3) * .003, .016) : .012), state.ctx.currentTime, .14);
     AUDIO_REACT.wave = wave;
     AUDIO_REACT.bass = state.padBus.gain.value;
     while (state.nextBeat < state.ctx.currentTime + state.lookAhead) {
       const notes = beatPattern(state.step, state.mood);
       notes.forEach(n => tone(state.music, n.type, midiToHz(n.note), state.nextBeat, n.dur, n.vel));
-      if (state.mood === 'play' && state.step % 4 === 0) noise(state.fx, state.nextBeat, .024, .02 + Math.min(.02, combo * .0012), 1800);
+      if (state.mood === 'play') {
+        if (state.step % 4 === 0) noise(state.fx, state.nextBeat, .024, .02 + Math.min(.024, Math.max(0, chain - 2) * .0035), 1800);
+      }
       AUDIO_REACT.beat = 1;
       AUDIO_REACT.pump = Math.max(AUDIO_REACT.pump, 1);
       state.nextBeat += state.beatLen;
