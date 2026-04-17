@@ -452,6 +452,7 @@ let routeChoice = null;
 let hudFrame = 0;
 let failTimeout = 0;
 let unlockTimeout = 0;
+let queuedLaunch = false;
 
 const CAM = { x:0, y:0, px:0, py:0, tx:0, ty:0 };
 const PRESENT = { playerX:0, playerY:0, camX:0, camY:0, ready:false };
@@ -1310,7 +1311,7 @@ function ensureTeachEncounterNow(sc = score, opts = {}) {
 }
 
 function maybeSpawnRouteFork() {
-  if (routeChoice || score < 8 || RUN.jumps < 7 || score % RUN.forkModulo !== 0) return;
+  if (routeChoice || RUN.encounter || RUN.pendingEncounterKind || score < 8 || RUN.jumps < 7 || score % RUN.forkModulo !== 0) return;
   const current = pool[pidx];
   const active = getNextNode();
   if (!current || !active || active.kind === 'boss') return;
@@ -1549,6 +1550,7 @@ function snapToOrbit(n) {
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
+  queuedLaunch = false;
   PL.fly = false;
   PL.trail = [];
 }
@@ -2976,6 +2978,7 @@ function doLaunch() {
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
+  queuedLaunch = false;
   PL.fly = true;
   PL.trail = [];
   burst(PL.x, PL.y, PL.col, 10, 3.2);
@@ -3148,7 +3151,7 @@ function doCapture(nxt, quality, hitAngle) {
   const shouldTeachEncounter = RUN.encounterPlan
     && !RUN.firstEncounterDone
     && RUN.jumps >= RUN.encounterPlan.firstEncounter;
-  if (!shouldTeachEncounter) maybeSpawnRouteFork();
+  if (!shouldTeachEncounter && !RUN.pendingEncounterKind) maybeSpawnRouteFork();
   if (shouldTeachEncounter && !routeChoice) {
     ensureTeachEncounterNow(score, fillOpts);
   } else if (!routeChoice) {
@@ -3163,6 +3166,7 @@ function doCapture(nxt, quality, hitAngle) {
   unlockTimeout = setTimeout(() => {
     unlockTimeout = 0;
     locked = false;
+    if (queuedLaunch && GS === 'play' && !PL.fly) doLaunch();
   }, 160);
 }
 
@@ -3409,6 +3413,18 @@ function update(dt) {
       const screenSeparation = Math.hypot(playerScreenX - nextScreenX, playerScreenY - nextScreenY);
       if (screenSeparation > Math.max(W, H) * 1.08) {
         doFail('overshot');
+        return;
+      }
+    }
+    if (RUN.encounter && nxt) {
+      const hz = RUN.encounter;
+      const targetDx = nxt.x - PL.x;
+      const targetDy = nxt.y - PL.y;
+      const targetDist = Math.hypot(targetDx, targetDy) || .001;
+      const encounterDist = Math.hypot(PL.x - hz.x, PL.y - hz.y);
+      const movingAwayFromTarget = (PL.vx * targetDx + PL.vy * targetDy) < 0;
+      if (encounterDist > hz.fieldR * 1.22 && movingAwayFromTarget && targetDist > Math.max(nxt.r * 1.75, hz.fieldR * .92)) {
+        doFail('miss');
         return;
       }
     }
@@ -3812,6 +3828,7 @@ function startGame() {
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
+  queuedLaunch = false;
   score = 0;
   hintDone = false;
   combo = 0;
@@ -3934,7 +3951,7 @@ function touchLaunchTarget(x, y) {
 }
 
 function startOrbitBoost(source, pointerId = null) {
-  if (GS !== 'play' || PL.fly || locked) return false;
+  if (GS !== 'play' || PL.fly) return false;
   if (ORBIT_BOOST.active && ORBIT_BOOST.source === source) return true;
   ORBIT_BOOST.active = true;
   ORBIT_BOOST.source = source;
@@ -3981,13 +3998,19 @@ cv.addEventListener('pointerdown', e => {
   handlePointer(e.clientX, e.clientY, e.pointerId);
 });
 cv.addEventListener('pointerup', e => {
-  if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) doLaunch();
+  if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) {
+    if (locked) queuedLaunch = true;
+    else doLaunch();
+  }
 });
 cv.addEventListener('pointercancel', e => {
   endOrbitBoost('pointer', e.pointerId);
 });
 document.addEventListener('pointerup', e => {
-  if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) doLaunch();
+  if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) {
+    if (locked) queuedLaunch = true;
+    else doLaunch();
+  }
 });
 document.addEventListener('pointercancel', e => {
   endOrbitBoost('pointer', e.pointerId);
@@ -4075,7 +4098,8 @@ window.addEventListener('orientationchange', () => {
 document.addEventListener('keyup', e => {
   if ((e.code === 'Space' || e.code === 'Enter') && endOrbitBoost('key') && GS === 'play' && !PL.fly) {
     e.preventDefault();
-    doLaunch();
+    if (locked) queuedLaunch = true;
+    else doLaunch();
   }
 });
 
