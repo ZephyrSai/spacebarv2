@@ -220,6 +220,7 @@ let renderAlpha = 0;
 let simTime = 0;
 const SIM_DT = 1 / 60;
 const MAX_SIM_STEPS = 5;
+const ORBIT_BOOST = { active:false, source:null, pointerId:null, charge:0 };
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 const GRAPHICS_CONFIG = {
   minimal: { label:'Minimal', maxDpr:1, stars:110, dust:0, trail:10, ringBlur:0, starGlow:false, nodeGlow:false, screenPulse:false, dustFx:false, cloudFx:false, particleScale:.42, planetLite:true },
@@ -269,7 +270,7 @@ function persist() {
 applyGraphicsSetting(save.graphics);
 
 const MODE_CONFIG = {
-  easy: { label:'Easy', pointer:88, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4 },
+  easy: { label:'Easy', pointer:80, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4 },
   medium: { label:'Medium', pointer:56, scoreMult:1.25, catchBuffer:5, catchArc:.38, cloudAlpha:.08, orbitSpeed:.92, lives:2 },
   hard: { label:'Hard', pointer:22, scoreMult:1.7, catchBuffer:0, catchArc:0, cloudAlpha:0, orbitSpeed:1.01, lives:1 }
 };
@@ -299,8 +300,8 @@ function makeEncounterPlan() {
   const r = rng(RUN.seed ^ 0x9e3779b9);
   const midSlots = sampleUnique(r, 16, 25, 2);
   return {
-    firstEncounter: 6,
-    firstEncounterLastChance: 7,
+    firstEncounter: 5,
+    firstEncounterLastChance: 6,
     earlyPlanets: sampleUnique(r, 7, 15, 1),
     midPlanet: midSlots[0],
     midStar: midSlots[1]
@@ -329,13 +330,13 @@ function encounterKindForJump(jump) {
     return RUN.pendingEncounterKind;
   }
   let planned = null;
-  if (!RUN.firstEncounterDone && jump >= plan.firstEncounter && jump <= plan.firstEncounterLastChance) planned = 'planet';
+  if (!RUN.firstEncounterDone && jump >= plan.firstEncounter) planned = 'planet';
   else if (plan.earlyPlanets.includes(jump)) planned = 'planet';
   else if (jump === plan.midPlanet) planned = 'planet';
   else if (jump === plan.midStar) planned = 'star';
   if (planned) {
     RUN.pendingEncounterKind = planned;
-    RUN.pendingEncounterRetryUntil = jump + (planned === 'star' ? 2 : 3);
+    RUN.pendingEncounterRetryUntil = jump + (planned === 'star' ? 2 : planned === 'planet' && !RUN.firstEncounterDone ? 8 : 3);
     return planned;
   }
   const block = blockEncounterForJump(jump);
@@ -456,7 +457,8 @@ const CAM = { x:0, y:0, px:0, py:0, tx:0, ty:0 };
 const PRESENT = { playerX:0, playerY:0, camX:0, camY:0, ready:false };
 const PL = {
   x:0, y:0, px:0, py:0, vx:0, vy:0, r:9, col:'#a78bff', trail:[], fly:false, spin:0, pspin:0,
-  settle:0, pSettle:0, settleV:0, orbitOffset:0, pOrbitOffset:0, orbitOffsetV:0, release:0
+  settle:0, pSettle:0, settleV:0, orbitOffset:0, pOrbitOffset:0, orbitOffsetV:0, release:0,
+  slingshot:0, slingTrace:[]
 };
 const pool = [];
 let pidx = 0;
@@ -509,8 +511,8 @@ const TUTORIAL = {
     {
       title:'Catch the next orbit.',
       body: () => IS_TOUCH
-        ? 'Tap the glowing target ring you want to fly to. If two route rings appear, tap the exact left or right ring you want and the launch will follow that path.'
-        : 'Press Space or Enter to launch. Stay aware of the next glowing ring and time your shot so the planet enters that orbit cleanly.'
+        ? 'Tap the glowing target ring you want to fly to. You can also press and hold on the playfield to speed up the current orbit, then release to launch. If two route rings appear, tap the exact left or right ring you want and the launch will follow that path.'
+        : 'Press Space or Enter to launch. You can also hold Space or Enter to speed up the current orbit, then release to launch. Stay aware of the next glowing ring and time your shot so the planet enters that orbit cleanly.'
     },
     {
       title:'Keep the chain alive.',
@@ -1263,15 +1265,16 @@ function fulfillPendingEncounter(sc = score, opts = {}) {
   const forcedDir = opts.forcedDir ?? (cur._tDir || 0);
   const mn = Math.min(W, H);
   const tune = ENCOUNTER_TUNING[RUN.pendingEncounterKind];
-  for (let i = 0; i < 16 && !RUN.encounter; i++) {
+  const teachPass = RUN.pendingEncounterKind === 'planet' && !RUN.firstEncounterDone;
+  for (let i = 0; i < (teachPass ? 28 : 16) && !RUN.encounter; i++) {
     pool[pidx + 1] = genNode(cur, sc + 1 + i * .22, forcedDir, blockers);
     if (pool[pidx + 1] && tune) {
       const nxt = pool[pidx + 1];
       const dx = nxt.x - cur.x;
       const dy = nxt.y - cur.y;
       const gap = Math.hypot(dx, dy) || 1;
-      const targetMin = mn * Math.max(.54, tune.safeDist - .02);
-      const targetMax = mn * .76;
+      const targetMin = mn * (teachPass ? Math.max(.58, tune.safeDist + .01) : Math.max(.54, tune.safeDist - .02));
+      const targetMax = mn * (teachPass ? .72 : .76);
       if (gap < targetMin || gap > targetMax) {
         const scale = clamp(gap < targetMin ? targetMin / gap : targetMax / gap, .82, 1.22);
         nxt.x = cur.x + dx * scale;
@@ -1282,6 +1285,25 @@ function fulfillPendingEncounter(sc = score, opts = {}) {
     }
     fill(sc, { forcedDir, blockers });
     if (!launchViewFits(cur, pool[pidx + 1], RUN.encounter)) continue;
+    maybeSpawnEncounter();
+  }
+  return !!RUN.encounter;
+}
+
+function ensureTeachEncounterNow(sc = score, opts = {}) {
+  if (RUN.firstEncounterDone || routeChoice) return !!RUN.encounter;
+  if (!RUN.encounterPlan || RUN.jumps < RUN.encounterPlan.firstEncounter) return !!RUN.encounter;
+  RUN.pendingEncounterKind = 'planet';
+  RUN.pendingEncounterRetryUntil = Math.max(RUN.pendingEncounterRetryUntil, RUN.jumps + 10);
+  if (fulfillPendingEncounter(sc, opts)) return true;
+  const cur = pool[pidx];
+  if (!cur) return false;
+  const forcedDir = opts.forcedDir ?? (cur._tDir || 0);
+  const blockers = opts.blockers || [];
+  for (let i = 0; i < 36 && !RUN.encounter; i++) {
+    pool[pidx + 1] = genNode(cur, sc + 1 + i * .14, forcedDir, blockers);
+    fill(sc, { forcedDir, blockers });
+    if (pool[pidx + 1] && !launchViewFits(cur, pool[pidx + 1], RUN.encounter)) continue;
     maybeSpawnEncounter();
   }
   return !!RUN.encounter;
@@ -1358,8 +1380,7 @@ function maybeSpawnEncounter() {
   if (!kind) return;
   const isTeachEncounter = RUN.encounterPlan
     && !RUN.firstEncounterDone
-    && RUN.jumps >= RUN.encounterPlan.firstEncounter
-    && RUN.jumps <= RUN.encounterPlan.firstEncounterLastChance;
+    && RUN.jumps >= RUN.encounterPlan.firstEncounter;
   const cur = pool[pidx];
   const nxt = getNextNode();
   if (!cur || !nxt) return;
@@ -1435,12 +1456,13 @@ function maybeSpawnEncounter() {
   };
   let routeCheck = chooseEncounterTrajectory(cur, nxt, RUN.encounter, save.launchMode);
   const teachFieldLimit = isTeachEncounter ? .76 : (kind === 'blackhole' ? 1.3 : 1.1);
-  if (!routeCheck?.ok || routeCheck.minFieldRatio > teachFieldLimit) {
+  const ringFitLimit = isTeachEncounter ? PL.r + 3.2 : PL.r + 4.2;
+  if (!routeCheck?.ok || routeCheck.minFieldRatio > teachFieldLimit || routeCheck.minRingMiss > ringFitLimit) {
     cur.spd *= -1;
     nxt.spd *= -1;
     routeCheck = chooseEncounterTrajectory(cur, nxt, RUN.encounter, save.launchMode);
   }
-  if (!routeCheck?.ok || routeCheck.minFieldRatio > teachFieldLimit) {
+  if (!routeCheck?.ok || routeCheck.minFieldRatio > teachFieldLimit || routeCheck.minRingMiss > ringFitLimit) {
     cur.spd *= -1;
     nxt.spd *= -1;
     clearEncounter();
@@ -1521,6 +1543,12 @@ function snapToOrbit(n) {
   PL.pOrbitOffset = 0;
   PL.orbitOffsetV = 0;
   PL.release = 0;
+  PL.slingshot = 0;
+  PL.slingTrace = [];
+  ORBIT_BOOST.active = false;
+  ORBIT_BOOST.source = null;
+  ORBIT_BOOST.pointerId = null;
+  ORBIT_BOOST.charge = 0;
   PL.fly = false;
   PL.trail = [];
 }
@@ -1540,8 +1568,9 @@ function updateCam() {
     CAM.tx = clampedTarget.x;
     CAM.ty = clampedTarget.y;
   }
-  CAM.x += (CAM.tx - CAM.x) * .12;
-  CAM.y += (CAM.ty - CAM.y) * .12;
+  const camScale = PL.fly ? GRAVITY_FX.scale : 1;
+  CAM.x += (CAM.tx - CAM.x) * (.12 * camScale);
+  CAM.y += (CAM.ty - CAM.y) * (.12 * camScale);
   if (!PL.fly && cur) {
     const clampedActual = clampCameraForLaunchView(CAM.x, CAM.y, cur, nxt, RUN.encounter);
     CAM.x = clampedActual.x;
@@ -1573,8 +1602,8 @@ const delayedRings = [];
 function addDelayedRing(delayMs, x, y, r0, col, lw, spd, fade) {
   delayedRings.push({ t: delayMs / 1000, x, y, r0, col, lw, spd, fade });
 }
-function addFloat(x, y, txt, col, size = 15) {
-  floats.push({ x, y, txt, col, life: 1, vy: -1.25, size });
+function addFloat(x, y, txt, col, size = 15, glow = 7) {
+  floats.push({ x, y, txt, col, life: 1, vy: -1.25, size, glow });
 }
 
 const STAR_LAYERS = [.08, .18, .34, .58];
@@ -1597,6 +1626,50 @@ const DUST = Array.from({ length: GRAPHICS_CONFIG.high.dust }, () => ({
 }));
 let bgTick = 0;
 const AUDIO_REACT = { wave:0, beat:0, bass:0, pump:0 };
+const GRAVITY_FX = { scale:1, mix:0, replay:null };
+
+function gravityTimeState() {
+  if (!PL.fly || !RUN.encounter) return { scale:1, mix:0 };
+  const enc = RUN.encounter;
+  const ed = Math.hypot(enc.x - PL.x, enc.y - PL.y) || .001;
+  const proximity = clamp(1 - ed / (enc.fieldR * 1.18), 0, 1);
+  if (proximity <= 0) return { scale:1, mix:0 };
+  const kindGain = enc.kind === 'blackhole' ? 1.16 : enc.kind === 'star' ? 1.02 : .94;
+  const mix = Math.pow(proximity, 1.45) * kindGain;
+  const slow = enc.kind === 'blackhole' ? .44 : enc.kind === 'star' ? .34 : .28;
+  return { scale: 1 - mix * slow, mix };
+}
+
+function buildGravityReplay(points, kind, body = null) {
+  if (!points || points.length < 6) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (body) {
+    minX = Math.min(minX, body.x - body.fieldR);
+    minY = Math.min(minY, body.y - body.fieldR);
+    maxX = Math.max(maxX, body.x + body.fieldR);
+    maxY = Math.max(maxY, body.y + body.fieldR);
+  }
+  const w = Math.max(1, maxX - minX);
+  const h = Math.max(1, maxY - minY);
+  return {
+    kind,
+    points: points.map(p => ({ x:(p.x - minX) / w, y:(p.y - minY) / h })),
+    body: body ? {
+      x:(body.x - minX) / w,
+      y:(body.y - minY) / h,
+      r: body.r / Math.max(w, h),
+      fieldR: body.fieldR / Math.max(w, h)
+    } : null,
+    life: 2.4,
+    progress: 0
+  };
+}
 
 function alphaHex(hex, alpha) {
   return hex + Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0');
@@ -1615,6 +1688,11 @@ function updateEffects(dt) {
   simTime += dt;
   bgTick += dt * .21;
   AUDIO_REACT.pump = Math.max(0, AUDIO_REACT.pump - dt * 3.6);
+  if (GRAVITY_FX.replay) {
+    GRAVITY_FX.replay.life = Math.max(0, GRAVITY_FX.replay.life - dt);
+    GRAVITY_FX.replay.progress = Math.min(1, GRAVITY_FX.replay.progress + dt * 2.2);
+    if (GRAVITY_FX.replay.life <= 0) GRAVITY_FX.replay = null;
+  }
   const focus = cameraFocusPoint();
   const cullCamX = focus ? (W / 2 - focus.fx) : CAM.x;
   const cullCamY = focus ? (H / 2 - focus.fy) : CAM.y;
@@ -2220,7 +2298,8 @@ function traceEncounterLaunch(node, nxt, enc, launchDelay = 0, keepPoints = fals
     const ringMiss = Math.abs(Math.hypot(x - nxt.x, y - nxt.y) - nxt.r);
     if (ringMiss < minRingMiss) minRingMiss = ringMiss;
     if (ringMiss < PL.r + 5) {
-      return { ok:true, crashed:false, minRingMiss, minFieldRatio, points };
+      if (keepPoints) points.push({ x, y });
+      return { ok:true, crashed:false, minRingMiss, minFieldRatio, points, hitPoint:{ x, y } };
     }
     if (Math.hypot(x - nxt.x, y - nxt.y) > Math.min(W, H) * 1.22) break;
   }
@@ -2229,7 +2308,8 @@ function traceEncounterLaunch(node, nxt, enc, launchDelay = 0, keepPoints = fals
     crashed:false,
     minRingMiss,
     minFieldRatio,
-    points
+    points,
+    hitPoint:null
   };
 }
 function chooseEncounterTrajectory(node, nxt, enc, modeName = save.launchMode, collectPoints = false) {
@@ -2238,7 +2318,10 @@ function chooseEncounterTrajectory(node, nxt, enc, modeName = save.launchMode, c
     const delay = i * 3;
     const res = traceEncounterLaunch(node, nxt, enc, delay, collectPoints || (modeName === 'easy' && i % 2 === 0));
     if (res.crashed) continue;
-    if (!best || (res.ok && !best.ok) || (res.ok === best.ok && res.minRingMiss < best.minRingMiss)) {
+    if (!best
+      || (res.ok && !best.ok)
+      || (res.ok === best.ok && res.minRingMiss < best.minRingMiss - .4)
+      || (res.ok === best.ok && Math.abs(res.minRingMiss - best.minRingMiss) <= .4 && res.minFieldRatio < best.minFieldRatio)) {
       best = { ...res, delay };
     }
   }
@@ -2502,6 +2585,86 @@ function drawRouteConnectors() {
   }
 }
 
+function drawGravityReplay() {
+  const replay = GRAVITY_FX.replay;
+  if (!replay || replay.points.length < 2) return;
+  const boxW = 332;
+  const boxH = 194;
+  const pad = 18;
+  const ox = pad;
+  const oy = H - boxH - pad;
+  const col = replay.kind === 'blackhole' ? '#9f92ff' : replay.kind === 'star' ? '#ffd86e' : '#8fd6ff';
+  cx.save();
+  cx.globalAlpha = Math.min(1, replay.life / 1.2) * .96;
+  cx.fillStyle = 'rgba(7,10,20,.34)';
+  cx.strokeStyle = 'rgba(255,255,255,.08)';
+  cx.lineWidth = 1;
+  cx.beginPath();
+  cx.roundRect(ox, oy, boxW, boxH, 14);
+  cx.fill();
+  cx.stroke();
+  cx.fillStyle = 'rgba(255,255,255,.78)';
+  cx.font = "700 14px 'Avenir Next','Segoe UI',sans-serif";
+  cx.textAlign = 'left';
+  cx.textBaseline = 'top';
+  cx.fillText('GRAVITY ECHO', ox + 14, oy + 12);
+  const innerX = ox + 14;
+  const innerY = oy + 36;
+  const innerW = boxW - 28;
+  const innerH = boxH - 52;
+  if (replay.body) {
+    const bx = innerX + replay.body.x * innerW;
+    const by = innerY + replay.body.y * innerH;
+    const fr = Math.max(20, replay.body.fieldR * Math.min(innerW, innerH));
+    const br = Math.max(10, replay.body.r * Math.min(innerW, innerH));
+    cx.save();
+    cx.globalAlpha *= .34;
+    cx.strokeStyle = col;
+    cx.setLineDash([8, 7]);
+    cx.lineWidth = 1.9;
+    cx.beginPath();
+    cx.arc(bx, by, fr, 0, Math.PI * 2);
+    cx.stroke();
+    cx.setLineDash([]);
+    const g = cx.createRadialGradient(bx, by, br * .3, bx, by, fr * .9);
+    g.addColorStop(0, replay.kind === 'blackhole' ? 'rgba(120,80,255,.9)' : replay.kind === 'star' ? 'rgba(255,216,110,.95)' : 'rgba(143,214,255,.95)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    cx.globalAlpha *= .9;
+    cx.fillStyle = g;
+    cx.beginPath();
+    cx.arc(bx, by, fr * .9, 0, Math.PI * 2);
+    cx.fill();
+    cx.globalAlpha = .92;
+    cx.fillStyle = replay.kind === 'blackhole' ? '#2a1450' : replay.kind === 'star' ? '#ffe4a2' : '#6cb8ff';
+    cx.beginPath();
+    cx.arc(bx, by, br, 0, Math.PI * 2);
+    cx.fill();
+    cx.restore();
+  }
+  const visibleCount = Math.max(2, Math.floor(1 + (replay.points.length - 1) * replay.progress));
+  cx.beginPath();
+  for (let i = 0; i < visibleCount; i++) {
+    const p = replay.points[i];
+    const px = innerX + p.x * innerW;
+    const py = innerY + p.y * innerH;
+    if (i === 0) cx.moveTo(px, py);
+    else cx.lineTo(px, py);
+  }
+  cx.strokeStyle = col;
+  cx.lineWidth = 3.1;
+  cx.shadowColor = col;
+  cx.shadowBlur = 20;
+  cx.stroke();
+  const end = replay.points[Math.min(visibleCount - 1, replay.points.length - 1)];
+  const ex = innerX + end.x * innerW;
+  const ey = innerY + end.y * innerH;
+  cx.fillStyle = col;
+  cx.beginPath();
+  cx.arc(ex, ey, 4.8, 0, Math.PI * 2);
+  cx.fill();
+  cx.restore();
+}
+
 function draw() {
   const targetCamX = lerp(CAM.px ?? CAM.x, CAM.x, renderAlpha);
   const targetCamY = lerp(CAM.py ?? CAM.y, CAM.y, renderAlpha);
@@ -2617,13 +2780,14 @@ function draw() {
       cx.textBaseline = 'middle';
       if (PERF.nodeGlow) {
         cx.shadowColor = f.col;
-        cx.shadowBlur = 7;
+        cx.shadowBlur = f.glow ?? 7;
       }
       cx.fillText(f.txt, f.x, f.y);
       cx.restore();
     }
     cx.restore();
   }
+  drawGravityReplay();
   if (RUN.alien) drawAlienShip();
   cx.restore();
   PRESENT.playerX = playerX;
@@ -2806,6 +2970,12 @@ function doLaunch() {
   PL.vx = -Math.sin(n.angle) * n.launch * dir;
   PL.vy = Math.cos(n.angle) * n.launch * dir;
   PL.release = 1;
+  PL.slingshot = 0;
+  PL.slingTrace = [{ x: PL.x, y: PL.y }];
+  ORBIT_BOOST.active = false;
+  ORBIT_BOOST.source = null;
+  ORBIT_BOOST.pointerId = null;
+  ORBIT_BOOST.charge = 0;
   PL.fly = true;
   PL.trail = [];
   burst(PL.x, PL.y, PL.col, 10, 3.2);
@@ -2826,7 +2996,30 @@ function showCombo(n, col) {
   el._t = setTimeout(() => el.style.opacity = '0', 960);
 }
 
-function applyNodeRewards(nxt, quality) {
+function landingPraise(prev, nxt, hitAngle) {
+  if (RUN.jumps < Math.max(5, (RUN.encounterPlan?.firstEncounter || 6) - 1)) return null;
+  const gap = prev ? Math.max(0, Math.hypot(nxt.x - prev.x, nxt.y - prev.y) - prev.r - nxt.r) : 0;
+  const spin = Math.max(Math.abs(prev?.spd || 0), Math.abs(nxt.spd || 0));
+  const boosted = PL.slingshot > .42;
+  const praise = boosted
+    ? ['EPIC', 'AWESOME', 'SICK', 'WILD']
+    : gap > Math.min(W, H) * .2 || spin > .05
+      ? ['NICE', 'SWEET', 'CLEAN', 'SHARP']
+      : null;
+  if (!praise) return null;
+  const txt = praise[(Math.random() * praise.length) | 0];
+  addFloat(
+    nxt.x + Math.cos(hitAngle) * (nxt.r + 22),
+    nxt.y + Math.sin(hitAngle) * (nxt.r + 22),
+    txt,
+    boosted ? '#ffe36e' : '#aef7ff',
+    boosted ? 22 : 18,
+    boosted ? 28 : 18
+  );
+  return { boosted };
+}
+
+function applyNodeRewards(nxt, quality, praise) {
   let bonus = 1;
   if (RUN.feverTimer > 0) bonus += 1;
   if (quality.perfect) {
@@ -2835,7 +3028,7 @@ function applyNodeRewards(nxt, quality) {
     PLAYER.perfectStreak++;
     PLAYER.feverCharge += 32;
     addComboTime(22);
-    addFloat(nxt.x, nxt.y - nxt.r - 30, 'PERFECT', '#ffd86e', 15);
+    if (!praise) addFloat(nxt.x, nxt.y - nxt.r - 30, 'PERFECT', '#ffd86e', 15);
     Music.onPerfect();
     updateMissionProgress('perfect');
   } else if (quality.near) {
@@ -2843,7 +3036,7 @@ function applyNodeRewards(nxt, quality) {
     PLAYER.perfectStreak = 0;
     PLAYER.feverCharge += 12;
     addComboTime(10);
-    addFloat(nxt.x, nxt.y - nxt.r - 30, 'EDGE', '#ffe8aa', 13);
+    if (!praise) addFloat(nxt.x, nxt.y - nxt.r - 30, 'EDGE', '#ffe8aa', 13);
   } else {
     PLAYER.perfectStreak = 0;
     PLAYER.feverCharge += 6;
@@ -2869,6 +3062,7 @@ function applyNodeRewards(nxt, quality) {
 }
 
 function doCapture(nxt, quality, hitAngle) {
+  const prev = pool[pidx];
   const incomingRadial = PL.vx * Math.cos(hitAngle) + PL.vy * Math.sin(hitAngle);
   const encounterExit = RUN.encounter ? {
     x: RUN.encounter.x,
@@ -2934,29 +3128,35 @@ function doCapture(nxt, quality, hitAngle) {
   comboTimer = COMBO_TIMER_BASE;
   comboLossFlash = 0;
   if (combo > 1) showCombo(combo, nxt.pal[0]);
+  const praise = landingPraise(prev, nxt, hitAngle);
+  if (praise?.boosted) {
+    const replayPoints = PL.slingTrace.concat([{ x: PL.x, y: PL.y }]);
+    GRAVITY_FX.replay = buildGravityReplay(replayPoints, encounterExit?.kind || 'planet', encounterExit);
+  }
+  if (praise?.boosted) Music.onSlingshot(encounterExit?.kind || 'planet');
 
-  const gain = applyNodeRewards(nxt, quality);
+  const gain = applyNodeRewards(nxt, quality, praise);
   const scored = addScore(gain, nxt.pal[0], nxt.x, nxt.y - nxt.r - 16, `+${Math.max(1, Math.round(gain * currentMode().scoreMult))}${combo > 1 ? ` ×${combo}` : ''}`);
   updateMissionProgress('score', scored);
   document.getElementById('best-num').textContent = Math.max(score, modeBestScore());
 
   PL.col = nxt.pal[0];
   PL.r = nxt.pr;
+  PL.slingshot = 0;
+  PL.slingTrace = [];
   orbTimer = 0;
   const shouldTeachEncounter = RUN.encounterPlan
     && !RUN.firstEncounterDone
-    && RUN.jumps >= RUN.encounterPlan.firstEncounter
-    && RUN.jumps <= RUN.encounterPlan.firstEncounterLastChance;
+    && RUN.jumps >= RUN.encounterPlan.firstEncounter;
   if (!shouldTeachEncounter) maybeSpawnRouteFork();
-  if (!routeChoice) maybeSpawnEncounter();
-  if (shouldTeachEncounter && !RUN.encounter && !routeChoice) {
-    for (let i = 0; i < 8 && !RUN.encounter; i++) {
-      pool[pidx + 1] = genNode(pool[pidx], score + 1 + i * .15, pool[pidx]._tDir);
-      maybeSpawnEncounter();
-    }
+  if (shouldTeachEncounter && !routeChoice) {
+    ensureTeachEncounterNow(score, fillOpts);
+  } else if (!routeChoice) {
+    maybeSpawnEncounter();
   }
   if (!routeChoice) ensurePlayableNextNode(score, fillOpts);
   if (!routeChoice && RUN.pendingEncounterKind && !RUN.encounter) fulfillPendingEncounter(score, fillOpts);
+  if (!routeChoice && shouldTeachEncounter && !RUN.encounter) ensureTeachEncounterNow(score, fillOpts);
   updateStatusHUD();
   Music.onCapture({ kind:nxt.kind, combo, perfect:quality.perfect, fever:RUN.feverTimer > 0 });
   clearTimeout(unlockTimeout);
@@ -3019,14 +3219,18 @@ function update(dt) {
   }
   if (GS !== 'play' && GS !== 'dying' && GS !== 'paused') return;
   if (GS === 'paused') return;
-  updateEffects(dt);
+  const gravTime = gravityTimeState();
+  GRAVITY_FX.scale = gravTime.scale;
+  GRAVITY_FX.mix = gravTime.mix;
+  const simScale = gravTime.scale;
+  updateEffects(dt * simScale);
   PL.px = PL.x;
   PL.py = PL.y;
   PL.pspin = PL.spin;
   PL.pSettle = PL.settle;
   PL.pOrbitOffset = PL.orbitOffset;
   if (RUN.feverTimer > 0 && GS === 'play') {
-    RUN.feverTimer = Math.max(0, RUN.feverTimer - dt * 60);
+    RUN.feverTimer = Math.max(0, RUN.feverTimer - dt * 60 * simScale);
     if (RUN.feverTimer === 0) Music.onFeverEnd();
   }
   hudFrame = (hudFrame + 1) % 6;
@@ -3044,22 +3248,31 @@ function update(dt) {
       ? { forcedDir: cur._tDir, blockers: [{ x: RUN.encounter.x, y: RUN.encounter.y, r: RUN.encounter.r, fieldR: RUN.encounter.fieldR, kind: RUN.encounter.kind }] }
       : { forcedDir: cur._tDir };
     if (RUN.encounter && !launchViewFits(cur, nxt, RUN.encounter)) clearEncounter(true);
+    const teachPending = RUN.encounterPlan
+      && !RUN.firstEncounterDone
+      && RUN.jumps >= RUN.encounterPlan.firstEncounter;
+    if (teachPending) {
+      ensureTeachEncounterNow(score, blockerOpts);
+    }
     ensurePlayableNextNode(score, blockerOpts);
     if (RUN.pendingEncounterKind && !RUN.encounter) fulfillPendingEncounter(score, blockerOpts);
+    if (teachPending && !RUN.encounter) ensureTeachEncounterNow(score, blockerOpts);
   }
   const nodeStart = Math.max(0, pidx - 1);
   const nodeEnd = Math.min(pool.length, pidx + 4);
   for (let i = nodeStart; i < nodeEnd; i++) {
     const n = pool[i];
+    const orbitFactor = i === pidx ? currentOrbitBoostFactor() : 1;
     n.px = n.x;
     n.py = n.y;
     n.pAngle = n.angle;
     n.pGateAngle = n.gateAngle;
     n.pBonusAngle = n.bonusAngle;
-    n.angle += n.spd;
-    n.gateAngle += n.spd;
-    n.bonusAngle += n.spd * 1.25;
-    if (i > pidx && n.moveAmp > 0) {
+    n.angle += n.spd * simScale * orbitFactor;
+    n.gateAngle += n.spd * simScale * orbitFactor;
+    n.bonusAngle += n.spd * 1.25 * simScale * orbitFactor;
+    const lockEncounterTarget = !!RUN.encounter && i === pidx + 1;
+    if (!lockEncounterTarget && i > pidx && n.moveAmp > 0) {
       const phase = simTime * n.moveRate + n.movePhase;
       n.x = n.baseX + Math.cos(phase) * n.moveAmp;
       n.y = n.baseY + Math.sin(phase) * n.moveAmp * .72;
@@ -3075,9 +3288,9 @@ function update(dt) {
     n.pAngle = n.angle;
     n.pGateAngle = n.gateAngle;
     n.pBonusAngle = n.bonusAngle;
-    n.angle += n.spd;
-    n.gateAngle += n.spd;
-    n.bonusAngle += n.spd * 1.25;
+    n.angle += n.spd * simScale;
+    n.gateAngle += n.spd * simScale;
+    n.bonusAngle += n.spd * 1.25 * simScale;
     if (n.moveAmp > 0) {
       const phase = simTime * n.moveRate + n.movePhase;
       n.x = n.baseX + Math.cos(phase) * n.moveAmp;
@@ -3086,10 +3299,14 @@ function update(dt) {
   }
 
   if (!PL.fly) {
-    PL.settleV += (-PL.settle * .18 - PL.settleV * .19);
-    PL.settle += PL.settleV;
-    PL.orbitOffsetV += (-PL.orbitOffset * .16 - PL.orbitOffsetV * .18);
-    PL.orbitOffset += PL.orbitOffsetV;
+    if (ORBIT_BOOST.active) {
+      const curSpd = Math.abs(cur?.spd || .02);
+      ORBIT_BOOST.charge = Math.min(1, ORBIT_BOOST.charge + dt * (1.3 + curSpd * 22));
+    }
+    PL.settleV += (-PL.settle * .18 - PL.settleV * .19) * simScale;
+    PL.settle += PL.settleV * simScale;
+    PL.orbitOffsetV += (-PL.orbitOffset * .16 - PL.orbitOffsetV * .18) * simScale;
+    PL.orbitOffset += PL.orbitOffsetV * simScale;
     if (Math.abs(PL.settle) < .02 && Math.abs(PL.settleV) < .02) {
       PL.settle = 0;
       PL.settleV = 0;
@@ -3103,12 +3320,12 @@ function update(dt) {
     PL.x = cur.x + Math.cos(orbitAngle) * orbitRadius;
     PL.y = cur.y + Math.sin(orbitAngle) * orbitRadius;
     if (routeChoice) setRouteSelection(autoRouteSelection(), { silent:true });
-    PL.spin += .08;
+    PL.spin += .08 * simScale;
     PL.trail = [];
-    orbTimer++;
+    orbTimer += simScale;
     if (orbTimer > timeout() + 20) handleOrbitTimeout();
   } else {
-    PL.release = Math.max(0, PL.release - .07 * dt * 60);
+    PL.release = Math.max(0, PL.release - .07 * dt * 60 * simScale);
     if (nxt) {
       const dx = nxt.x - PL.x;
       const dy = nxt.y - PL.y;
@@ -3116,8 +3333,8 @@ function update(dt) {
       const activeEncounter = RUN.encounter;
       const targetScale = activeEncounter ? (activeEncounter.teach ? .54 : activeEncounter.kind === 'planet' ? .66 : activeEncounter.kind === 'star' ? .72 : .8) : 1;
       const g = (0.0011 / (d * .0006 + .03)) * targetScale;
-      PL.vx += (dx / d) * g;
-      PL.vy += (dy / d) * g;
+      PL.vx += (dx / d) * g * simScale;
+      PL.vy += (dy / d) * g * simScale;
     }
     if (RUN.encounter) {
       const hz = RUN.encounter;
@@ -3125,8 +3342,9 @@ function update(dt) {
       const ey = hz.y - PL.y;
       const ed = Math.hypot(ex, ey) || .001;
       const pull = encounterPull(hz, ed);
-      PL.vx += (ex / ed) * pull;
-      PL.vy += (ey / ed) * pull;
+      PL.slingshot = Math.max(PL.slingshot, Math.max(0, 1 - ed / (hz.fieldR * 1.04)), pull * 5200);
+      PL.vx += (ex / ed) * pull * simScale;
+      PL.vy += (ey / ed) * pull * simScale;
       const hitRadius = hz.kind === 'blackhole'
         ? hz.r + PL.r * .55
         : hz.r * .56 + PL.r * .24;
@@ -3148,12 +3366,17 @@ function update(dt) {
       const nx = -PL.vy / speed;
       const ny = PL.vx / speed;
       const slip = Math.sin((1 - PL.release) * Math.PI) * PL.release * .32;
-      PL.vx += nx * slip;
-      PL.vy += ny * slip;
+      PL.vx += nx * slip * simScale;
+      PL.vy += ny * slip * simScale;
     }
-    PL.x += PL.vx;
-    PL.y += PL.vy;
-    PL.spin += .18;
+    PL.x += PL.vx * simScale;
+    PL.y += PL.vy * simScale;
+    PL.spin += .18 * simScale;
+    if (RUN.encounter) {
+      const last = PL.slingTrace[PL.slingTrace.length - 1];
+      if (!last || Math.hypot(PL.x - last.x, PL.y - last.y) > 9) PL.slingTrace.push({ x: PL.x, y: PL.y });
+      if (PL.slingTrace.length > 44) PL.slingTrace.shift();
+    }
     PL.trail.unshift({ x: PL.x, y: PL.y });
     if (PL.trail.length > PERF.trail) PL.trail.pop();
 
@@ -3286,10 +3509,10 @@ const Music = (() => {
     compressor.ratio.value = 2.2;
     compressor.attack.value = .01;
     compressor.release.value = .18;
-    music.gain.value = .62;
-    fx.gain.value = .9;
+    music.gain.value = .82;
+    fx.gain.value = 1.04;
     padBus.gain.value = .0001;
-    master.gain.value = 1.08;
+    master.gain.value = 1.34;
     music.connect(filter);
     padBus.connect(padFilter);
     filter.connect(compressor);
@@ -3404,7 +3627,8 @@ const Music = (() => {
     const chain = Math.max(0, combo - 1);
     const comboTempo = Math.min(chain, 6) * 5 + Math.max(0, chain - 6) * 2.2;
     const feverTempo = Math.max(0, chain - 4) * 1.5;
-    state.beatLen = RUN.feverTimer > 0 ? 60 / (142 + Math.min(feverTempo, 10)) / 2 : GS === 'play' ? 60 / (114 + comboTempo) / 2 : 60 / 102 / 2;
+    const gravScale = Math.max(.6, GRAVITY_FX.scale || 1);
+    state.beatLen = (RUN.feverTimer > 0 ? 60 / (142 + Math.min(feverTempo, 10)) / 2 : GS === 'play' ? 60 / (114 + comboTempo) / 2 : 60 / 102 / 2) / gravScale;
     state.filter.frequency.setTargetAtTime(RUN.feverTimer > 0 ? 2920 : GS === 'play' ? 1850 + Math.min(Math.max(0, chain - 3) * 120, 520) : 1100, state.ctx.currentTime, .08);
     const padTarget = GS === 'play' ? (.12 + Math.min(.05, combo * .01) + Math.min(.03, Math.max(0, chain - 3) * .005) + (RUN.feverTimer > 0 ? .08 : 0)) : .08;
     const chord = progressions[state.chord % progressions.length];
@@ -3413,7 +3637,7 @@ const Music = (() => {
       voice.osc.frequency.setTargetAtTime(midiToHz(note), state.ctx.currentTime, .24);
       voice.amp.gain.setTargetAtTime(voice.gain * (GS === 'play' ? 1 : .75), state.ctx.currentTime, .24);
     });
-    const wave = .5 + .5 * Math.sin(state.ctx.currentTime * (RUN.feverTimer > 0 ? 8.9 : GS === 'play' ? 6.9 + Math.min(chain * .18, 1.2) : 4.8));
+    const wave = .5 + .5 * Math.sin(state.ctx.currentTime * (RUN.feverTimer > 0 ? 8.9 : GS === 'play' ? 6.9 + Math.min(chain * .18, 1.2) : 4.8) * gravScale);
     const bassBase = RUN.feverTimer > 0 ? 1560 : GS === 'play' ? 1040 + Math.min(Math.max(0, chain - 2) * 58, 260) : 800;
     state.padFilter.frequency.setTargetAtTime(bassBase + wave * (RUN.feverTimer > 0 ? 760 : 420 + Math.min(Math.max(0, chain - 2) * 42, 180)), state.ctx.currentTime, .1);
     state.padBus.gain.setTargetAtTime(padTarget + wave * (GS === 'play' ? .026 + Math.min(Math.max(0, chain - 3) * .003, .016) : .012), state.ctx.currentTime, .14);
@@ -3466,6 +3690,13 @@ const Music = (() => {
       tone(state.fx, 'triangle', midiToHz(note), t, .18, .22, midiToHz(note + 5));
       tone(state.fx, 'sine', midiToHz(note + (meta.fever ? 7 : 0)), t, .14, .12);
       noise(state.fx, t, .04, .03, 3600);
+    },
+    onSlingshot(kind = 'planet') {
+      if (!state.ctx) return;
+      const t = state.ctx.currentTime;
+      const chord = kind === 'blackhole' ? [74, 79, 83] : kind === 'star' ? [76, 81, 86] : [72, 79, 84];
+      chord.forEach((n, i) => tone(state.fx, i === 1 ? 'sine' : 'triangle', midiToHz(n), t + i * .045, .17, .12 + i * .02, midiToHz(n + 5)));
+      tone(state.fx, 'sawtooth', midiToHz(chord[2] + 7), t + .055, .16, .08, midiToHz(chord[2] + 12));
     },
     onPerfect() {
       if (!state.ctx) return;
@@ -3574,6 +3805,13 @@ function startGame() {
   PRESENT.playerY = 0;
   PRESENT.camX = 0;
   PRESENT.camY = 0;
+  GRAVITY_FX.scale = 1;
+  GRAVITY_FX.mix = 0;
+  GRAVITY_FX.replay = null;
+  ORBIT_BOOST.active = false;
+  ORBIT_BOOST.source = null;
+  ORBIT_BOOST.pointerId = null;
+  ORBIT_BOOST.charge = 0;
   score = 0;
   hintDone = false;
   combo = 0;
@@ -3695,7 +3933,32 @@ function touchLaunchTarget(x, y) {
   return best && best.d <= best.threshold ? best : null;
 }
 
-function handlePointer(x, y) {
+function startOrbitBoost(source, pointerId = null) {
+  if (GS !== 'play' || PL.fly || locked) return false;
+  if (ORBIT_BOOST.active && ORBIT_BOOST.source === source) return true;
+  ORBIT_BOOST.active = true;
+  ORBIT_BOOST.source = source;
+  ORBIT_BOOST.pointerId = pointerId;
+  ORBIT_BOOST.charge = 0;
+  return true;
+}
+
+function endOrbitBoost(source = null, pointerId = null) {
+  if (!ORBIT_BOOST.active) return false;
+  if (source && ORBIT_BOOST.source !== source) return false;
+  if (pointerId !== null && ORBIT_BOOST.pointerId !== pointerId) return false;
+  ORBIT_BOOST.active = false;
+  ORBIT_BOOST.source = null;
+  ORBIT_BOOST.pointerId = null;
+  ORBIT_BOOST.charge = 0;
+  return true;
+}
+
+function currentOrbitBoostFactor() {
+  return ORBIT_BOOST.active && GS === 'play' && !PL.fly ? 1 + ORBIT_BOOST.charge * 1.08 : 1;
+}
+
+function handlePointer(x, y, pointerId = null) {
   Music.unlock();
   if (TUTORIAL.active) {
     if (TUTORIAL.step < TUTORIAL.steps.length - 1) {
@@ -3707,7 +3970,7 @@ function handlePointer(x, y) {
     return;
   }
   if (GS === 'play' && !PL.fly) {
-    doLaunch();
+    startOrbitBoost('pointer', pointerId);
     return;
   }
   if (GS === 'play') doLaunch();
@@ -3715,7 +3978,19 @@ function handlePointer(x, y) {
 
 cv.addEventListener('pointerdown', e => {
   e.preventDefault();
-  handlePointer(e.clientX, e.clientY);
+  handlePointer(e.clientX, e.clientY, e.pointerId);
+});
+cv.addEventListener('pointerup', e => {
+  if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) doLaunch();
+});
+cv.addEventListener('pointercancel', e => {
+  endOrbitBoost('pointer', e.pointerId);
+});
+document.addEventListener('pointerup', e => {
+  if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) doLaunch();
+});
+document.addEventListener('pointercancel', e => {
+  endOrbitBoost('pointer', e.pointerId);
 });
 function isInteractiveTarget(node) {
   return !!node?.closest?.('button, a, input, select, textarea, [data-allow-touch]');
@@ -3775,7 +4050,8 @@ window.addEventListener('orientationchange', () => {
   }
   if (e.code === 'Space' || e.code === 'Enter') {
     e.preventDefault();
-    if (GS === 'play') doLaunch();
+    if (GS === 'play' && !PL.fly) startOrbitBoost('key');
+    else if (GS === 'play') doLaunch();
     else if (GS === 'paused') resumeGame();
     else beginFromCurrentScreen();
   }
@@ -3794,6 +4070,12 @@ window.addEventListener('orientationchange', () => {
   if (e.code === 'KeyR') {
     e.preventDefault();
     quickRestart();
+  }
+});
+document.addEventListener('keyup', e => {
+  if ((e.code === 'Space' || e.code === 'Enter') && endOrbitBoost('key') && GS === 'play' && !PL.fly) {
+    e.preventDefault();
+    doLaunch();
   }
 });
 
