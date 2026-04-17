@@ -683,7 +683,7 @@ function cameraFocusPoint() {
       fy = cur.y * (1 - mix) + focusY * mix;
     }
   } else if (nxt) {
-    const mix = PL.fly ? .76 : .62;
+    const mix = PL.fly ? .76 : .56;
     fx = cur.x * (1 - mix) + nxt.x * mix;
     fy = cur.y * (1 - mix) + nxt.y * mix;
   }
@@ -838,12 +838,12 @@ function forwardProgressionOkay(prev, x, y, heading, minDot = 0) {
 
 function pairVisibleInView(cur, nextX, nextY, nextR) {
   if (!cur) return true;
-  const mix = .62;
+  const mix = .56;
   const fx = cur.x * (1 - mix) + nextX * mix;
   const fy = cur.y * (1 - mix) + nextY * mix;
   const camX = W / 2 - fx;
   const camY = H / 2 - fy;
-  const buffer = Math.min(W, H) * .08;
+  const buffer = Math.min(W, H) * .12;
   const curScreenX = cur.x + camX;
   const curScreenY = cur.y + camY;
   const nextScreenX = nextX + camX;
