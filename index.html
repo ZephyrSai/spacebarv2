@@ -23,6 +23,17 @@ canvas{display:block;position:fixed;inset:0}
 .hud-v{font-size:.78rem;line-height:1.32;margin-top:4px}
 #mission-wrap.complete{border-color:rgba(110,255,216,.34);box-shadow:0 0 26px rgba(110,255,216,.1)}
 #status-line{display:flex;gap:8px;flex-wrap:wrap}
+.vitals-card{padding:10px 12px 12px}
+.vitals-grid{display:grid;gap:8px;margin-top:6px}
+.vital{display:grid;gap:4px}
+.vital-head{display:flex;justify-content:space-between;align-items:center;font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;opacity:.82}
+.vital-name{opacity:.62}
+.vital-value{font-size:.52rem;opacity:.72}
+.vital-track{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+.vital-fill{height:100%;width:0%;border-radius:999px;transition:width .14s ease-out, opacity .14s ease-out;box-shadow:0 0 14px currentColor}
+.vital-fill.shield{color:#7fdcff;background:linear-gradient(90deg,#58bfff,#b4f0ff)}
+.vital-fill.fever{color:#ff8ebd;background:linear-gradient(90deg,#ff6ea8,#ffc4de)}
+.vital-fill.gravity{color:#ffd86e;background:linear-gradient(90deg,#ffb85e,#fff08d)}
 .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;background:rgba(255,255,255,.04)}
 .pill.live{border-color:rgba(255,216,110,.4);color:#ffd86e}
 .pill.shield-on{border-color:rgba(96,197,255,.42);color:#87d8ff}
@@ -61,10 +72,11 @@ canvas{display:block;position:fixed;inset:0}
 .subtag{font-size:.82rem;max-width:520px;line-height:1.55;opacity:.74;margin-bottom:1rem}
 .title-box{max-width:min(560px,90vw);padding:18px 20px;border:1px solid rgba(255,255,255,.08);border-radius:22px;background:rgba(8,10,26,.4);margin-bottom:1.5rem}
 .title-box strong{color:#ffd86e}
-.intro-callout{max-width:min(620px,92vw);margin-top:12px;padding:14px 16px;border:1px solid rgba(255,216,110,.22);border-radius:18px;background:linear-gradient(180deg,rgba(255,216,110,.12),rgba(96,197,255,.08));text-align:left;box-shadow:0 10px 30px rgba(0,0,0,.18)}
-.intro-callout .k{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;opacity:.54}
-.intro-callout .v{font-size:.96rem;line-height:1.56;margin-top:8px;font-weight:600;letter-spacing:-.01em}
-.intro-callout .v strong{color:#ffd86e}
+.title-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.how-list{display:grid;gap:12px;margin-top:14px}
+.how-item{padding:12px 14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.035)}
+.how-item strong{display:block;font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;opacity:.72;margin-bottom:6px}
+.how-item span{display:block;font-size:.95rem;line-height:1.58;opacity:.9}
 .mode-row,.gfx-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:0 0 1.2rem}
 .mode-btn{padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);font:inherit;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;pointer-events:all;transition:border-color .14s,transform .12s,color .14s,box-shadow .14s}
 .mode-btn.active,.gfx-btn.active{border-color:rgba(96,197,255,.52);color:#fff;box-shadow:0 0 22px rgba(96,197,255,.14)}
@@ -107,6 +119,8 @@ canvas{display:block;position:fixed;inset:0}
 @media (max-width:680px),(pointer:coarse){
   #run-wrap{top:max(12px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));max-width:min(66vw,260px);gap:6px}
   .hud-card{padding:7px 9px;border-radius:12px;background:rgba(6,8,21,.34);backdrop-filter:blur(10px)}
+  .vitals-card{padding:8px 9px 10px}
+  .vital-track{height:8px}
   .hud-v{font-size:.66rem;line-height:1.24}
   .pill{padding:5px 8px;font-size:.5rem}
   #best-wrap{top:max(12px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right))}
@@ -129,12 +143,26 @@ canvas{display:block;position:fixed;inset:0}
   <div id="run-wrap">
     <div class="hud-card" id="daily-wrap"><div class="hud-k">Daily Drift</div><div class="hud-v" id="daily-text">Loading…</div></div>
     <div class="hud-card" id="mission-wrap"><div class="hud-k">Mission</div><div class="hud-v" id="mission-text">Stay moving.</div></div>
+    <div class="hud-card vitals-card" id="vitals-wrap">
+      <div class="hud-k">Vitals</div>
+      <div class="vitals-grid">
+        <div class="vital">
+          <div class="vital-head"><span class="vital-name">Shield</span><span class="vital-value" id="shield-v">Offline</span></div>
+          <div class="vital-track"><div class="vital-fill shield" id="shield-bar"></div></div>
+        </div>
+        <div class="vital">
+          <div class="vital-head"><span class="vital-name">Fever</span><span class="vital-value" id="fever-v">0%</span></div>
+          <div class="vital-track"><div class="vital-fill fever" id="fever-bar"></div></div>
+        </div>
+        <div class="vital">
+          <div class="vital-head"><span class="vital-name">Gravity</span><span class="vital-value" id="gravity-v">0%</span></div>
+          <div class="vital-track"><div class="vital-fill gravity" id="gravity-bar"></div></div>
+        </div>
+      </div>
+    </div>
     <div id="status-line">
-      <div class="pill" id="shield-pill">Shield Offline</div>
-      <div class="pill" id="fever-pill">Fever Calm</div>
       <div class="pill" id="route-pill">No Route Fork</div>
       <div class="pill" id="life-pill">Lives 2</div>
-      <div class="pill" id="gravity-pill">Gravity 0%</div>
       <div class="pill" id="mode-pill">Mode Medium ×1.25</div>
     </div>
   </div>
@@ -161,10 +189,6 @@ canvas{display:block;position:fixed;inset:0}
   <div class="title-box">
     <div class="subtag">Chain clean launches through neon orbit fields, bend your path around planets and suns, dodge rare black holes, and ride the old-school synth pulse. <strong>Space</strong> starts instantly.</div>
     <div id="title-daily" style="font-size:.78rem;line-height:1.5;opacity:.72"></div>
-    <div class="intro-callout">
-      <div class="k">New Mechanic</div>
-      <div class="v">After launch, if your shot is drifting off line, <strong>hold Space / Enter</strong> on desktop or <strong>hold the screen</strong> on touch to spend <strong>Gravity</strong> charge and gently pull toward the next orbit. On orbit, hold still means orbit-speed boost as usual.</div>
-    </div>
   </div>
   <div class="mode-row" id="mode-row">
     <button class="mode-btn" data-mode="easy">Easy<small>Long guide · ×0.9</small></button>
@@ -178,8 +202,11 @@ canvas{display:block;position:fixed;inset:0}
     <button class="gfx-btn" data-gfx="high">High</button>
   </div>
   <div class="gfx-meta" id="gfx-meta"></div>
-  <button class="btn bp" id="b-play">Launch</button>
-  <button class="btn bg" id="b-hs1">High Scores</button>
+  <div class="title-actions">
+    <button class="btn bp" id="b-play">Launch</button>
+    <button class="btn bg" id="b-how">How to Play</button>
+    <button class="btn bg" id="b-hs1">High Scores</button>
+  </div>
 </div>
 
 <div class="scr off" id="s-over">
@@ -211,6 +238,17 @@ canvas{display:block;position:fixed;inset:0}
     <div class="tutorial-actions">
       <button class="btn bg" id="tutorial-skip">Skip</button>
       <button class="btn bp" id="tutorial-next">Next</button>
+    </div>
+  </div>
+</div>
+
+<div class="scr off" id="s-how">
+  <div class="tutorial-card">
+    <div class="tutorial-k">How To Play</div>
+    <div class="tutorial-title">Rules & Controls</div>
+    <div class="tutorial-body" id="how-body"></div>
+    <div class="tutorial-actions">
+      <button class="btn bp" id="b-how-close">Close</button>
     </div>
   </div>
 </div>
@@ -571,59 +609,66 @@ function updateMissionHUD() {
 }
 const HUD_CACHE = {
   shieldText:'',
-  shieldOn:null,
+  shieldFill:-1,
   feverText:'',
-  feverOn:null,
+  feverFill:-1,
   routeText:'',
   routeOn:null,
   lifeText:'',
   lifeOn:null,
   gravityText:'',
-  gravityOn:null,
+  gravityFill:-1,
   modeText:'',
   hintOn:null
 };
 const STATUS_EL = {
-  shield: document.getElementById('shield-pill'),
-  fever: document.getElementById('fever-pill'),
+  shieldValue: document.getElementById('shield-v'),
+  shieldBar: document.getElementById('shield-bar'),
+  feverValue: document.getElementById('fever-v'),
+  feverBar: document.getElementById('fever-bar'),
   route: document.getElementById('route-pill'),
   life: document.getElementById('life-pill'),
-  gravity: document.getElementById('gravity-pill'),
+  gravityValue: document.getElementById('gravity-v'),
+  gravityBar: document.getElementById('gravity-bar'),
   mode: document.getElementById('mode-pill'),
   routeHint: document.getElementById('route-hint')
 };
 function updateStatusHUD(force = false) {
   const cfg = currentMode();
-  const shieldText = PLAYER.shield ? 'Shield Armed' : 'Shield Offline';
-  const shieldOn = !!PLAYER.shield;
+  const shieldText = PLAYER.shield ? 'Armed' : 'Offline';
+  const shieldFill = PLAYER.shield ? 1 : 0;
   const feverText = RUN.feverTimer > 0
-    ? `Fever ${(Math.ceil(RUN.feverTimer / 6) / 10).toFixed(1)}s`
-    : `Fever Charge ${Math.min(100, Math.round(PLAYER.feverCharge))}%`;
-  const feverOn = RUN.feverTimer > 0;
+    ? `${(Math.ceil(RUN.feverTimer / 6) / 10).toFixed(1)}s`
+    : `${Math.min(100, Math.round(PLAYER.feverCharge))}%`;
+  const feverFill = RUN.feverTimer > 0
+    ? clamp(RUN.feverTimer / 360, 0, 1)
+    : clamp(PLAYER.feverCharge / 100, 0, 1);
   const routeText = routeChoice ? `Route ${selectedRouteLabel()} Locked` : 'No Route Fork';
   const routeOn = !!routeChoice;
   const lifeText = `Lives ${RUN.lives}`;
   const lifeOn = RUN.lives > 1;
   const gravityPct = Math.round(PLAYER.gravityCharge * 100);
-  const gravityText = FLIGHT_ASSIST.active ? `Gravity ${gravityPct}% Pull` : `Gravity ${gravityPct}%`;
-  const gravityOn = FLIGHT_ASSIST.active || PLAYER.gravityCharge > .18;
+  const gravityText = FLIGHT_ASSIST.active ? `${gravityPct}% Pull` : `${gravityPct}%`;
+  const gravityFill = clamp(PLAYER.gravityCharge, 0, 1);
   const modeText = `Mode ${cfg.label} ×${cfg.scoreMult}`;
   const hintOn = !!routeChoice && GS === 'play' && !PL.fly;
   if (force || HUD_CACHE.shieldText !== shieldText) {
     HUD_CACHE.shieldText = shieldText;
-    STATUS_EL.shield.textContent = shieldText;
+    STATUS_EL.shieldValue.textContent = shieldText;
   }
-  if (force || HUD_CACHE.shieldOn !== shieldOn) {
-    HUD_CACHE.shieldOn = shieldOn;
-    STATUS_EL.shield.classList.toggle('shield-on', shieldOn);
+  if (force || HUD_CACHE.shieldFill !== shieldFill) {
+    HUD_CACHE.shieldFill = shieldFill;
+    STATUS_EL.shieldBar.style.width = `${shieldFill * 100}%`;
+    STATUS_EL.shieldBar.style.opacity = shieldFill > 0 ? '1' : '.22';
   }
   if (force || HUD_CACHE.feverText !== feverText) {
     HUD_CACHE.feverText = feverText;
-    STATUS_EL.fever.textContent = feverText;
+    STATUS_EL.feverValue.textContent = feverText;
   }
-  if (force || HUD_CACHE.feverOn !== feverOn) {
-    HUD_CACHE.feverOn = feverOn;
-    STATUS_EL.fever.classList.toggle('fever-on', feverOn);
+  if (force || HUD_CACHE.feverFill !== feverFill) {
+    HUD_CACHE.feverFill = feverFill;
+    STATUS_EL.feverBar.style.width = `${feverFill * 100}%`;
+    STATUS_EL.feverBar.style.opacity = feverFill > 0 ? '1' : '.22';
   }
   if (force || HUD_CACHE.routeText !== routeText) {
     HUD_CACHE.routeText = routeText;
@@ -643,11 +688,12 @@ function updateStatusHUD(force = false) {
   }
   if (force || HUD_CACHE.gravityText !== gravityText) {
     HUD_CACHE.gravityText = gravityText;
-    STATUS_EL.gravity.textContent = gravityText;
+    STATUS_EL.gravityValue.textContent = gravityText;
   }
-  if (force || HUD_CACHE.gravityOn !== gravityOn) {
-    HUD_CACHE.gravityOn = gravityOn;
-    STATUS_EL.gravity.classList.toggle('live', gravityOn);
+  if (force || HUD_CACHE.gravityFill !== gravityFill) {
+    HUD_CACHE.gravityFill = gravityFill;
+    STATUS_EL.gravityBar.style.width = `${gravityFill * 100}%`;
+    STATUS_EL.gravityBar.style.opacity = gravityFill > 0 ? '1' : '.22';
   }
   if (force || HUD_CACHE.modeText !== modeText) {
     HUD_CACHE.modeText = modeText;
@@ -843,6 +889,33 @@ function renderTutorialStep() {
     : 'Keyboard onboarding';
   document.getElementById('tutorial-next').textContent = TUTORIAL.step === TUTORIAL.steps.length - 1 ? 'Start Run' : 'Next';
 }
+function howToMarkup() {
+  const launchText = IS_TOUCH
+    ? 'Tap the target ring to launch. Hold on the current orbit to speed it up, then release to fire. During flight, hold the screen only when a near-miss needs Gravity assist.'
+    : 'Press Space or Enter to launch. Hold Space or Enter on the current orbit to speed it up, then release to fire. During flight, hold only when a near-miss needs Gravity assist.';
+  const routeText = IS_TOUCH
+    ? 'When a fork appears, the arrow auto-locks the route in view. Tap anywhere to launch that highlighted path.'
+    : 'When a fork appears, the arrow auto-locks the route in view. Use Left / Right or A / D if you want to override it, then Space, Enter, or click to launch.';
+  return `
+    <div class="how-list">
+      <div class="how-item">
+        <strong>Launch Timing</strong>
+        <span>${launchText}</span>
+      </div>
+      <div class="how-item">
+        <strong>Gravity Assist</strong>
+        <span>Gravity charge is an emergency tool. If a shot is only slightly off line, hold during flight to bend toward the next orbit. Bad shots do not qualify, and assisted landings do not recharge the meter.</span>
+      </div>
+      <div class="how-item">
+        <strong>Fever, Shield, Lives</strong>
+        <span>Clean landings build Fever and help earn Shield chances. Shield can save one mistake, but black holes still end the run instantly. Lives vary by difficulty.</span>
+      </div>
+      <div class="how-item">
+        <strong>Routes & Graphics</strong>
+        <span>${routeText} Graphics default to High on every device. If performance feels rough, lower it to Medium, Low, or Minimal from the title screen.</span>
+      </div>
+    </div>`;
+}
 function closeTutorial(markSeen = true) {
   TUTORIAL.active = false;
   document.getElementById('s-tutorial').classList.add('off');
@@ -856,6 +929,13 @@ function showTutorial() {
   TUTORIAL.step = 0;
   renderTutorialStep();
   document.getElementById('s-tutorial').classList.remove('off');
+}
+function showHowTo() {
+  document.getElementById('how-body').innerHTML = howToMarkup();
+  document.getElementById('s-how').classList.remove('off');
+}
+function closeHowTo() {
+  document.getElementById('s-how').classList.add('off');
 }
 
 function updateDailyBest() {
@@ -4227,6 +4307,13 @@ window.addEventListener('orientationchange', () => {
       return;
     }
   }
+  if (!document.getElementById('s-how').classList.contains('off')) {
+    if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      closeHowTo();
+      return;
+    }
+  }
   if (e.code === 'Escape') {
     e.preventDefault();
     if (GS === 'play') {
@@ -4292,6 +4379,8 @@ function showHS() {
   document.getElementById('hsp').classList.add('open');
 }
 document.getElementById('b-play').addEventListener('click', () => { Music.unlock(); beginFromCurrentScreen(); });
+document.getElementById('b-how').addEventListener('click', () => { Music.unlock(); showHowTo(); });
+document.getElementById('b-how-close').addEventListener('click', closeHowTo);
 document.getElementById('b-retry').addEventListener('click', () => { Music.unlock(); beginFromCurrentScreen(); });
 document.getElementById('b-menu').addEventListener('click', goToMenu);
 document.getElementById('b-resume').addEventListener('click', resumeGame);
