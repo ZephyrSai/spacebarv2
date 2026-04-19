@@ -536,7 +536,7 @@ const PRESENT = { playerX:0, playerY:0, camX:0, camY:0, ready:false };
 const PL = {
   x:0, y:0, px:0, py:0, vx:0, vy:0, r:9, col:'#a78bff', trail:[], fly:false, spin:0, pspin:0,
   settle:0, pSettle:0, settleV:0, orbitOffset:0, pOrbitOffset:0, orbitOffsetV:0, release:0,
-  slingshot:0, slingTrace:[]
+  slingshot:0, slingTrace:[], flightTrace:[]
 };
 const pool = [];
 let pidx = 0;
@@ -1681,6 +1681,7 @@ function snapToOrbit(n) {
   PL.release = 0;
   PL.slingshot = 0;
   PL.slingTrace = [];
+  PL.flightTrace = [];
   ORBIT_BOOST.active = false;
   ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
@@ -1695,6 +1696,7 @@ function snapToOrbit(n) {
   INPUT_LATCH.keyFlightHold = false;
   PL.fly = false;
   PL.trail = [];
+  resetFTL();
 }
 
 function updateCam() {
@@ -1771,6 +1773,7 @@ const DUST = Array.from({ length: GRAPHICS_CONFIG.high.dust }, () => ({
 let bgTick = 0;
 const AUDIO_REACT = { wave:0, beat:0, bass:0, pump:0 };
 const GRAVITY_FX = { scale:1, mix:0, replay:null };
+const FTL_FX = { active:false, path:[], index:0, progress:0, speed:0 };
 
 function gravityTimeState() {
   if (!PL.fly || !RUN.encounter) return { scale:1, mix:0 };
@@ -1813,6 +1816,89 @@ function buildGravityReplay(points, kind, body = null) {
     life: 2.4,
     progress: 0
   };
+}
+function resetFTL() {
+  FTL_FX.active = false;
+  FTL_FX.path = [];
+  FTL_FX.index = 0;
+  FTL_FX.progress = 0;
+  FTL_FX.speed = 0;
+}
+function pushFlightTracePoint(x, y) {
+  const last = PL.flightTrace[PL.flightTrace.length - 1];
+  if (!last || Math.hypot(x - last.x, y - last.y) > 7) PL.flightTrace.push({ x, y });
+  if (PL.flightTrace.length > 220) PL.flightTrace.shift();
+}
+function alienBodyHit() {
+  const a = RUN.alien;
+  if (!a || a.passive || !PL.fly) return false;
+  const dx = PL.x - a.x;
+  const dy = PL.y - a.y;
+  const rx = 22 + PL.r;
+  const ry = 12 + PL.r * .85;
+  return (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1;
+}
+function beginFTLRewind(cur) {
+  if (!cur || !PL.flightTrace.length) return false;
+  const trace = PL.flightTrace.slice();
+  const last = trace[trace.length - 1];
+  if (!last || Math.hypot(last.x - cur.x, last.y - cur.y) > 8) trace.push({ x: cur.x, y: cur.y });
+  if (trace.length < 2) return false;
+  const alienX = RUN.alien?.x ?? PL.x;
+  const alienY = RUN.alien?.y ?? PL.y;
+  endFlightAssist();
+  RUN.alien = null;
+  FTL_FX.active = true;
+  FTL_FX.path = trace.slice().reverse();
+  FTL_FX.index = 0;
+  FTL_FX.progress = 0;
+  FTL_FX.speed = Math.max(760, Math.hypot(PL.vx, PL.vy) * 92);
+  PL.fly = false;
+  PL.vx = 0;
+  PL.vy = 0;
+  PL.trail = [];
+  addFloat(PL.x, PL.y - 26, 'FASTER THAN LIGHT', '#8fd6ff', 22, 26);
+  addRing(alienX, alienY, 18, '#8fd6ff', 2.4, 4.2, .03);
+  burst(alienX, alienY, '#bff5ff', 18, 4.8);
+  addRing(PL.x, PL.y, PL.r * 1.8, '#8fd6ff', 3.2, 5.2, .028);
+  burst(PL.x, PL.y, '#8fd6ff', 22, 5.8);
+  updateStatusHUD();
+  return true;
+}
+function updateFTL(dt, cur) {
+  if (!FTL_FX.active || !FTL_FX.path.length || !cur) return false;
+  let travel = dt * FTL_FX.speed;
+  while (travel > 0 && FTL_FX.index < FTL_FX.path.length - 1) {
+    const a = FTL_FX.path[FTL_FX.index];
+    const b = FTL_FX.path[FTL_FX.index + 1];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y) || .001;
+    const left = seg * (1 - FTL_FX.progress);
+    if (travel < left) {
+      FTL_FX.progress += travel / seg;
+      travel = 0;
+    } else {
+      travel -= left;
+      FTL_FX.index++;
+      FTL_FX.progress = 0;
+    }
+  }
+  if (FTL_FX.index >= FTL_FX.path.length - 1) {
+    resetFTL();
+    snapToOrbit(cur);
+    orbTimer = 0;
+    addRing(PL.x, PL.y, PL.r * 1.2, '#8fd6ff', 2.6, 3.8, .03);
+    return true;
+  }
+  const a = FTL_FX.path[FTL_FX.index];
+  const b = FTL_FX.path[FTL_FX.index + 1];
+  PL.x = lerp(a.x, b.x, FTL_FX.progress);
+  PL.y = lerp(a.y, b.y, FTL_FX.progress);
+  PL.vx = 0;
+  PL.vy = 0;
+  PL.spin -= .32 * dt * 60;
+  PL.trail.unshift({ x: PL.x, y: PL.y });
+  if (PL.trail.length > PERF.trail) PL.trail.pop();
+  return true;
 }
 
 function alphaHex(hex, alpha) {
@@ -3068,6 +3154,17 @@ function captureProfile(nxt, hitAngle) {
     radialBand: assist.catchBuffer * Math.max(.45, 1 - syncEase * .35)
   };
 }
+function assistCatchProfile(nxt, hitRadius) {
+  const assisted = FLIGHT_ASSIST.usedThisFlight || FLIGHT_ASSIST.active || PL.slingshot > .18;
+  if (!assisted) return { radialBoost:0, bandBoost:0, arcMul:1, missMul:.68 };
+  const closeness = clamp(1 - hitRadius / Math.max(10, nxt.r * .26 + 8), 0, 1);
+  return {
+    radialBoost: 4 + closeness * 8,
+    bandBoost: 2 + closeness * 5,
+    arcMul: 1.08 + closeness * .18,
+    missMul: .82
+  };
+}
 
 function handleComboTimeout() {
   if (combo > 0) {
@@ -3140,6 +3237,7 @@ function doLaunch() {
   PL.release = 1;
   PL.slingshot = 0;
   PL.slingTrace = [{ x: launch.x, y: launch.y }];
+  PL.flightTrace = [{ x: launch.x, y: launch.y }];
   ORBIT_BOOST.active = false;
   ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
@@ -3148,6 +3246,7 @@ function doLaunch() {
   ORBIT_BOOST.pressedAt = 0;
   queuedLaunch = false;
   FLIGHT_ASSIST.usedThisFlight = false;
+  resetFTL();
   PL.fly = true;
   PL.trail = [];
   burst(launch.x, launch.y, PL.col, 10, 3.2);
@@ -3344,6 +3443,7 @@ function doCapture(nxt, quality, hitAngle) {
 function doFail(reason = 'miss', opts = {}) {
   if (GS !== 'play') return;
   endFlightAssist();
+  resetFTL();
   if (!PL.fly && !['planet', 'star', 'blackhole', 'timeout'].includes(reason)) {
     opts = { ...opts, bypassLife:true };
   }
@@ -3474,6 +3574,12 @@ function update(dt) {
     }
   }
 
+  if (FTL_FX.active) {
+    updateFTL(dt, cur);
+    updateCam();
+    return;
+  }
+
   if (!PL.fly) {
     if (ORBIT_BOOST.pending && performance.now() - ORBIT_BOOST.pressedAt >= HOLD_BOOST_DELAY_MS) {
       ORBIT_BOOST.pending = false;
@@ -3574,7 +3680,12 @@ function update(dt) {
     }
     PL.x += PL.vx * simScale;
     PL.y += PL.vy * simScale;
+    pushFlightTracePoint(PL.x, PL.y);
     PL.spin += .18 * simScale;
+    if (alienBodyHit() && beginFTLRewind(cur)) {
+      updateCam();
+      return;
+    }
     if (RUN.encounter) {
       const last = PL.slingTrace[PL.slingTrace.length - 1];
       if (!last || Math.hypot(PL.x - last.x, PL.y - last.y) > 9) PL.slingTrace.push({ x: PL.x, y: PL.y });
@@ -3588,16 +3699,17 @@ function update(dt) {
       const dy = PL.y - nxt.y;
       const d = Math.hypot(dx, dy);
       const hitRadius = Math.abs(d - nxt.r);
-      const radialWindow = PL.r + 2 + (currentMode().catchBuffer || 0);
+      const assistCatch = assistCatchProfile(nxt, hitRadius);
+      const radialWindow = PL.r + 2 + (currentMode().catchBuffer || 0) + assistCatch.radialBoost;
       if (hitRadius < radialWindow) {
         const hitAngle = Math.atan2(dy, dx);
         const profile = captureProfile(nxt, hitAngle);
-        if (hitRadius <= PL.r + 2 + profile.radialBand && profile.catchErr < profile.catchArc / 2) {
+        if (hitRadius <= PL.r + 2 + profile.radialBand + assistCatch.bandBoost && profile.catchErr < (profile.catchArc * assistCatch.arcMul) / 2) {
           doCapture(nxt, classifyCapture(nxt, hitAngle, profile.laneErr), hitAngle);
           return;
         }
         const deepMissWindow = Math.max(1.6, (PL.r + 2) * .42);
-        if (hitRadius < deepMissWindow && profile.catchErr > profile.catchArc * .68) {
+        if (hitRadius < deepMissWindow && profile.catchErr > profile.catchArc * assistCatch.missMul) {
           doFail('ring miss');
           return;
         }
@@ -4023,6 +4135,7 @@ function startGame() {
   GRAVITY_FX.scale = 1;
   GRAVITY_FX.mix = 0;
   GRAVITY_FX.replay = null;
+  resetFTL();
   ORBIT_BOOST.active = false;
   ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
@@ -4045,6 +4158,7 @@ function startGame() {
   failAnim = 0;
   shake = 0;
   routeChoice = null;
+  PL.flightTrace = [];
   parts = [];
   floats = [];
   rings = [];
