@@ -58,15 +58,21 @@ canvas{display:block;position:fixed;inset:0}
 @keyframes planet-breathe{0%,100%{transform:translateX(-50%) scale(.98);opacity:.74}50%{transform:translateX(-50%) scale(1.04);opacity:1}}
 @keyframes key-sway{0%,100%{transform:translateX(-50%) perspective(960px) rotateX(59deg) rotateZ(-.5deg)}50%{transform:translateX(-50%) perspective(960px) rotateX(59deg) rotateZ(.5deg)}}
 .tag{font-size:.64rem;letter-spacing:.26em;text-transform:uppercase;opacity:.32;margin-bottom:1.6rem}
-.subtag{font-size:.82rem;max-width:520px;line-height:1.55;opacity:.74;margin-bottom:2rem}
+.subtag{font-size:.82rem;max-width:520px;line-height:1.55;opacity:.74;margin-bottom:1rem}
 .title-box{max-width:min(560px,90vw);padding:18px 20px;border:1px solid rgba(255,255,255,.08);border-radius:22px;background:rgba(8,10,26,.4);margin-bottom:1.5rem}
 .title-box strong{color:#ffd86e}
+.intro-callout{max-width:min(620px,92vw);margin-top:12px;padding:14px 16px;border:1px solid rgba(255,216,110,.22);border-radius:18px;background:linear-gradient(180deg,rgba(255,216,110,.12),rgba(96,197,255,.08));text-align:left;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.intro-callout .k{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;opacity:.54}
+.intro-callout .v{font-size:.96rem;line-height:1.56;margin-top:8px;font-weight:600;letter-spacing:-.01em}
+.intro-callout .v strong{color:#ffd86e}
 .mode-row,.gfx-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:0 0 1.2rem}
 .mode-btn{padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);font:inherit;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;pointer-events:all;transition:border-color .14s,transform .12s,color .14s,box-shadow .14s}
 .mode-btn.active,.gfx-btn.active{border-color:rgba(96,197,255,.52);color:#fff;box-shadow:0 0 22px rgba(96,197,255,.14)}
 .mode-btn small{display:block;font-size:.56rem;letter-spacing:.04em;opacity:.66;margin-top:2px}
 .gfx-row{margin-top:-.4rem}
 .gfx-btn{padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);font:inherit;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;pointer-events:all;transition:border-color .14s,transform .12s,color .14s,box-shadow .14s}
+.gfx-meta{max-width:min(640px,90vw);margin:-.3rem 0 1.15rem;padding:10px 14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(8,10,26,.28);font-size:.7rem;line-height:1.5;opacity:.74}
+.gfx-meta strong{color:#fff;font-weight:700}
 .btn{padding:13px 42px;border-radius:999px;font-family:inherit;font-size:.92rem;font-weight:700;letter-spacing:.04em;cursor:pointer;border:none;transition:transform .12s,box-shadow .14s,background .14s;color:inherit;pointer-events:all;margin:5px}
 .btn:active{transform:scale(.94)!important}
 .bp{background:#fff;color:#03030e}
@@ -78,10 +84,10 @@ canvas{display:block;position:fixed;inset:0}
 .ov-best{font-size:.8rem;color:#ffd86e;font-weight:600;min-height:1.4em;margin-bottom:1rem}
 .ov-meta{font-size:.78rem;line-height:1.55;opacity:.72;max-width:420px;margin-bottom:1.7rem}
 .ov-key{font-size:.6rem;letter-spacing:.1em;opacity:.22;margin-top:.8rem}
-.tutorial-card{width:min(560px,94vw);padding:18px 18px 16px;border:1px solid rgba(255,255,255,.12);border-radius:22px;background:rgba(6,9,25,.76);backdrop-filter:blur(18px);box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:left}
+.tutorial-card{width:min(660px,96vw);padding:22px 22px 18px;border:1px solid rgba(255,255,255,.12);border-radius:24px;background:rgba(6,9,25,.8);backdrop-filter:blur(18px);box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:left}
 .tutorial-k{font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;opacity:.42}
-.tutorial-title{font-size:clamp(1.3rem,4vw,2rem);font-weight:700;letter-spacing:-.03em;margin-top:6px}
-.tutorial-body{font-size:.9rem;line-height:1.58;opacity:.84;margin-top:10px}
+.tutorial-title{font-size:clamp(1.55rem,4.4vw,2.3rem);font-weight:700;letter-spacing:-.03em;margin-top:6px}
+.tutorial-body{font-size:1rem;line-height:1.66;opacity:.9;margin-top:12px}
 .tutorial-meta{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;opacity:.36;margin-top:12px}
 .tutorial-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}
 #hsp{position:fixed;bottom:0;left:0;right:0;background:rgba(4,5,20,.97);border-top:1px solid rgba(255,255,255,.07);padding:20px 22px 28px;z-index:40;transform:translateY(100%);transition:transform .32s cubic-bezier(.22,1,.36,1)}
@@ -128,6 +134,7 @@ canvas{display:block;position:fixed;inset:0}
       <div class="pill" id="fever-pill">Fever Calm</div>
       <div class="pill" id="route-pill">No Route Fork</div>
       <div class="pill" id="life-pill">Lives 2</div>
+      <div class="pill" id="gravity-pill">Gravity 0%</div>
       <div class="pill" id="mode-pill">Mode Medium ×1.25</div>
     </div>
   </div>
@@ -154,6 +161,10 @@ canvas{display:block;position:fixed;inset:0}
   <div class="title-box">
     <div class="subtag">Chain clean launches through neon orbit fields, bend your path around planets and suns, dodge rare black holes, and ride the old-school synth pulse. <strong>Space</strong> starts instantly.</div>
     <div id="title-daily" style="font-size:.78rem;line-height:1.5;opacity:.72"></div>
+    <div class="intro-callout">
+      <div class="k">New Mechanic</div>
+      <div class="v">After launch, if your shot is drifting off line, <strong>hold Space / Enter</strong> on desktop or <strong>hold the screen</strong> on touch to spend <strong>Gravity</strong> charge and gently pull toward the next orbit. On orbit, hold still means orbit-speed boost as usual.</div>
+    </div>
   </div>
   <div class="mode-row" id="mode-row">
     <button class="mode-btn" data-mode="easy">Easy<small>Long guide · ×0.9</small></button>
@@ -166,6 +177,7 @@ canvas{display:block;position:fixed;inset:0}
     <button class="gfx-btn" data-gfx="medium">Medium</button>
     <button class="gfx-btn" data-gfx="high">High</button>
   </div>
+  <div class="gfx-meta" id="gfx-meta"></div>
   <button class="btn bp" id="b-play">Launch</button>
   <button class="btn bg" id="b-hs1">High Scores</button>
 </div>
@@ -220,13 +232,22 @@ let renderAlpha = 0;
 let simTime = 0;
 const SIM_DT = 1 / 60;
 const MAX_SIM_STEPS = 5;
-const ORBIT_BOOST = { active:false, source:null, pointerId:null, charge:0 };
+const HOLD_BOOST_DELAY_MS = 72;
+const ORBIT_BOOST = { active:false, pending:false, source:null, pointerId:null, charge:0, pressedAt:0 };
+const FLIGHT_ASSIST = { active:false, source:null, pointerId:null, usedThisFlight:false };
+const INPUT_LATCH = { keyFlightHold:false };
 const IS_TOUCH = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 const GRAPHICS_CONFIG = {
   minimal: { label:'Minimal', maxDpr:1, stars:110, dust:0, trail:10, ringBlur:0, starGlow:false, nodeGlow:false, screenPulse:false, dustFx:false, cloudFx:false, particleScale:.42, planetLite:true },
   low: { label:'Low', maxDpr:1.2, stars:170, dust:1, trail:14, ringBlur:0, starGlow:false, nodeGlow:false, screenPulse:false, dustFx:false, cloudFx:false, particleScale:.58, planetLite:true },
   medium: { label:'Medium', maxDpr:1.4, stars:210, dust:2, trail:18, ringBlur:3, starGlow:true, nodeGlow:true, screenPulse:false, dustFx:true, cloudFx:true, particleScale:.74, planetLite:false },
   high: { label:'High', maxDpr:1.5, stars:230, dust:3, trail:20, ringBlur:5, starGlow:true, nodeGlow:true, screenPulse:true, dustFx:true, cloudFx:true, particleScale:.84, planetLite:false }
+};
+const GRAPHICS_TEXT = {
+  minimal: '<strong>Minimal</strong>: lowest load, reduced stars, simplified planets, no glow-heavy effects.',
+  low: '<strong>Low</strong>: more stars and trails, still keeps expensive glow and screen pulse mostly off.',
+  medium: '<strong>Medium</strong>: full neon nodes, star glow, dust, cloud effects, and richer motion.',
+  high: '<strong>High</strong>: everything in Medium plus denser stars, stronger blur, and music-reactive screen pulse.'
 };
 const PERF = { ...GRAPHICS_CONFIG.high };
 function applyGraphicsSetting(setting) {
@@ -270,9 +291,9 @@ function persist() {
 applyGraphicsSetting(save.graphics);
 
 const MODE_CONFIG = {
-  easy: { label:'Easy', pointer:80, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4 },
-  medium: { label:'Medium', pointer:56, scoreMult:1.25, catchBuffer:5, catchArc:.38, cloudAlpha:.08, orbitSpeed:.92, lives:2 },
-  hard: { label:'Hard', pointer:22, scoreMult:1.7, catchBuffer:0, catchArc:0, cloudAlpha:0, orbitSpeed:1.01, lives:1 }
+  easy: { label:'Easy', pointer:80, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4, gravStart:.28, gravGain:.07, gravGainFloor:.28, gravPull:.0105, gravDrain:.48, gravWindow:.52, gravMinDot:.04, gravLaneMul:3.2 },
+  medium: { label:'Medium', pointer:56, scoreMult:1.25, catchBuffer:5, catchArc:.38, cloudAlpha:.08, orbitSpeed:.92, lives:2, gravStart:.18, gravGain:.048, gravGainFloor:.2, gravPull:.0078, gravDrain:.6, gravWindow:.47, gravMinDot:.16, gravLaneMul:2.55 },
+  hard: { label:'Hard', pointer:22, scoreMult:1.7, catchBuffer:0, catchArc:0, cloudAlpha:0, orbitSpeed:1.01, lives:1, gravStart:.1, gravGain:.032, gravGainFloor:.15, gravPull:.0058, gravDrain:.74, gravWindow:.42, gravMinDot:.26, gravLaneMul:2.05 }
 };
 function currentMode() {
   return MODE_CONFIG[save.launchMode] || MODE_CONFIG.medium;
@@ -282,6 +303,15 @@ function currentModeKey() {
 }
 function modeBestScore(mode = currentModeKey()) {
   return save.modeBest[mode] || 0;
+}
+function gravityGainFactor() {
+  const cfg = currentMode();
+  return clamp(1 - Math.max(0, RUN.jumps - 2) * .028, cfg.gravGainFloor, 1);
+}
+function rechargeGravityAssist(quality) {
+  const cfg = currentMode();
+  const qualityBoost = quality?.perfect ? 1.18 : quality?.near ? 1.08 : 1;
+  PLAYER.gravityCharge = clamp(PLAYER.gravityCharge + cfg.gravGain * gravityGainFactor() * qualityBoost, 0, 1);
 }
 function modeScoreList(mode = currentModeKey()) {
   if (!Array.isArray(save.modeScores[mode])) save.modeScores[mode] = [];
@@ -402,7 +432,8 @@ const PLAYER = {
   bossClears: 0,
   routesTaken: 0,
   perfectStreak: 0,
-  feverCharge: 0
+  feverCharge: 0,
+  gravityCharge: 0
 };
 
 const PLANET_MODELS = [
@@ -518,8 +549,8 @@ const TUTORIAL = {
     {
       title:'Keep the chain alive.',
       body: () => IS_TOUCH
-        ? 'Landing cleanly builds combo, fever, and shield chances. If route forks appear, tap the visible left or right ring directly. Use Pause or Retry at the bottom any time.'
-        : 'Clean catches build combo, fever, and shield chances. Use Left/Right or A/D to choose the left or right fork, Esc to pause, and R for an instant restart.'
+        ? 'Landing cleanly builds combo, fever, shield chances, and gravity charge. During flight, press and hold on the playfield to spend gravity charge and pull slightly toward the target if your line is off. If route forks appear, tap the visible left or right ring directly. Use Pause or Retry at the bottom any time.'
+        : 'Clean catches build combo, fever, shield chances, and gravity charge. During flight, press and hold Space or Enter to spend gravity charge and pull slightly toward the target if your line is off. Use Left/Right or A/D to choose the left or right fork, Esc to pause, and R for an instant restart.'
     },
     {
       title:'Tune graphics if needed.',
@@ -547,6 +578,8 @@ const HUD_CACHE = {
   routeOn:null,
   lifeText:'',
   lifeOn:null,
+  gravityText:'',
+  gravityOn:null,
   modeText:'',
   hintOn:null
 };
@@ -555,6 +588,7 @@ const STATUS_EL = {
   fever: document.getElementById('fever-pill'),
   route: document.getElementById('route-pill'),
   life: document.getElementById('life-pill'),
+  gravity: document.getElementById('gravity-pill'),
   mode: document.getElementById('mode-pill'),
   routeHint: document.getElementById('route-hint')
 };
@@ -570,6 +604,9 @@ function updateStatusHUD(force = false) {
   const routeOn = !!routeChoice;
   const lifeText = `Lives ${RUN.lives}`;
   const lifeOn = RUN.lives > 1;
+  const gravityPct = Math.round(PLAYER.gravityCharge * 100);
+  const gravityText = FLIGHT_ASSIST.active ? `Gravity ${gravityPct}% Pull` : `Gravity ${gravityPct}%`;
+  const gravityOn = FLIGHT_ASSIST.active || PLAYER.gravityCharge > .18;
   const modeText = `Mode ${cfg.label} ×${cfg.scoreMult}`;
   const hintOn = !!routeChoice && GS === 'play' && !PL.fly;
   if (force || HUD_CACHE.shieldText !== shieldText) {
@@ -604,6 +641,14 @@ function updateStatusHUD(force = false) {
     HUD_CACHE.lifeOn = lifeOn;
     STATUS_EL.life.classList.toggle('live', lifeOn);
   }
+  if (force || HUD_CACHE.gravityText !== gravityText) {
+    HUD_CACHE.gravityText = gravityText;
+    STATUS_EL.gravity.textContent = gravityText;
+  }
+  if (force || HUD_CACHE.gravityOn !== gravityOn) {
+    HUD_CACHE.gravityOn = gravityOn;
+    STATUS_EL.gravity.classList.toggle('live', gravityOn);
+  }
   if (force || HUD_CACHE.modeText !== modeText) {
     HUD_CACHE.modeText = modeText;
     STATUS_EL.mode.textContent = modeText;
@@ -623,6 +668,8 @@ function updateGraphicsButtons() {
   document.querySelectorAll('.gfx-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.gfx === save.graphics);
   });
+  const meta = document.getElementById('gfx-meta');
+  if (meta) meta.innerHTML = GRAPHICS_TEXT[save.graphics] || GRAPHICS_TEXT.high;
 }
 
 function routeEntries() {
@@ -1547,10 +1594,17 @@ function snapToOrbit(n) {
   PL.slingshot = 0;
   PL.slingTrace = [];
   ORBIT_BOOST.active = false;
+  ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
+  ORBIT_BOOST.pressedAt = 0;
+  FLIGHT_ASSIST.active = false;
+  FLIGHT_ASSIST.source = null;
+  FLIGHT_ASSIST.pointerId = null;
+  FLIGHT_ASSIST.usedThisFlight = false;
   queuedLaunch = false;
+  INPUT_LATCH.keyFlightHold = false;
   PL.fly = false;
   PL.trail = [];
 }
@@ -2246,6 +2300,26 @@ function renderPlayerState() {
   return {
     x: lerp(PL.px ?? PL.x, PL.x, renderAlpha),
     y: lerp(PL.py ?? PL.y, PL.y, renderAlpha)
+  };
+}
+function currentDisplayedLaunchState(node) {
+  const centerX = lerp(node.px ?? node.x, node.x, renderAlpha);
+  const centerY = lerp(node.py ?? node.y, node.y, renderAlpha);
+  const orbitAngle = lerpAngle(
+    (node.pAngle ?? node.angle) + (PL.pOrbitOffset ?? PL.orbitOffset),
+    node.angle + PL.orbitOffset,
+    renderAlpha
+  );
+  const orbitRadius = lerp(node.r + (PL.pSettle ?? PL.settle), node.r + PL.settle, renderAlpha);
+  const dir = node.spd > 0 ? 1 : -1;
+  const px = centerX + Math.cos(orbitAngle) * orbitRadius;
+  const py = centerY + Math.sin(orbitAngle) * orbitRadius;
+  return {
+    angle: orbitAngle,
+    x: px,
+    y: py,
+    vx: -Math.sin(orbitAngle) * node.launch * dir,
+    vy: Math.cos(orbitAngle) * node.launch * dir
   };
 }
 function sampleLaunchState(node, launchDelay = 0) {
@@ -2965,23 +3039,30 @@ function doLaunch() {
   if (PL.fly || locked || GS !== 'play') return;
   const n = pool[pidx];
   if (!n) return;
-  const dir = n.spd > 0 ? 1 : -1;
+  const launch = currentDisplayedLaunchState(n);
   addRing(n.x, n.y, n.r * .94, PL.col, 2.8, 2.4, .032);
-  addRing(PL.x, PL.y, PL.r * 1.2, '#ffffff', 1.8, 2.1, .05);
-  burst(PL.x, PL.y, PL.col, 14, 4.1);
-  PL.vx = -Math.sin(n.angle) * n.launch * dir;
-  PL.vy = Math.cos(n.angle) * n.launch * dir;
+  addRing(launch.x, launch.y, PL.r * 1.2, '#ffffff', 1.8, 2.1, .05);
+  burst(launch.x, launch.y, PL.col, 14, 4.1);
+  PL.x = launch.x;
+  PL.y = launch.y;
+  PL.px = launch.x;
+  PL.py = launch.y;
+  PL.vx = launch.vx;
+  PL.vy = launch.vy;
   PL.release = 1;
   PL.slingshot = 0;
-  PL.slingTrace = [{ x: PL.x, y: PL.y }];
+  PL.slingTrace = [{ x: launch.x, y: launch.y }];
   ORBIT_BOOST.active = false;
+  ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
+  ORBIT_BOOST.pressedAt = 0;
   queuedLaunch = false;
+  FLIGHT_ASSIST.usedThisFlight = false;
   PL.fly = true;
   PL.trail = [];
-  burst(PL.x, PL.y, PL.col, 10, 3.2);
+  burst(launch.x, launch.y, PL.col, 10, 3.2);
   hintDone = true;
   document.getElementById('hint').classList.add('gone');
   Music.onLaunch({ speed: Math.hypot(PL.vx, PL.vy) });
@@ -3074,6 +3155,7 @@ function doCapture(nxt, quality, hitAngle) {
     fieldR: RUN.encounter.fieldR,
     kind: RUN.encounter.kind
   } : null;
+  endFlightAssist();
   PL.fly = false;
   PL.trail = [];
   locked = true;
@@ -3139,6 +3221,7 @@ function doCapture(nxt, quality, hitAngle) {
   if (praise?.boosted) Music.onSlingshot(encounterExit?.kind || 'planet');
 
   const gain = applyNodeRewards(nxt, quality, praise);
+  if (!FLIGHT_ASSIST.usedThisFlight) rechargeGravityAssist(quality);
   const scored = addScore(gain, nxt.pal[0], nxt.x, nxt.y - nxt.r - 16, `+${Math.max(1, Math.round(gain * currentMode().scoreMult))}${combo > 1 ? ` ×${combo}` : ''}`);
   updateMissionProgress('score', scored);
   document.getElementById('best-num').textContent = Math.max(score, modeBestScore());
@@ -3172,6 +3255,7 @@ function doCapture(nxt, quality, hitAngle) {
 
 function doFail(reason = 'miss', opts = {}) {
   if (GS !== 'play') return;
+  endFlightAssist();
   if (!PL.fly && !['planet', 'star', 'blackhole', 'timeout'].includes(reason)) {
     opts = { ...opts, bypassLife:true };
   }
@@ -3238,7 +3322,7 @@ function update(dt) {
     if (RUN.feverTimer === 0) Music.onFeverEnd();
   }
   hudFrame = (hudFrame + 1) % 6;
-  if (hudFrame === 0 && (RUN.feverTimer > 0 || (routeChoice && !PL.fly))) updateStatusHUD();
+  if (hudFrame === 0 && (RUN.feverTimer > 0 || (routeChoice && !PL.fly) || FLIGHT_ASSIST.active || ORBIT_BOOST.active || ORBIT_BOOST.pending)) updateStatusHUD();
 
   if (GS === 'dying') {
     updateCam();
@@ -3303,6 +3387,11 @@ function update(dt) {
   }
 
   if (!PL.fly) {
+    if (ORBIT_BOOST.pending && performance.now() - ORBIT_BOOST.pressedAt >= HOLD_BOOST_DELAY_MS) {
+      ORBIT_BOOST.pending = false;
+      ORBIT_BOOST.active = true;
+      ORBIT_BOOST.charge = 0;
+    }
     if (ORBIT_BOOST.active) {
       const curSpd = Math.abs(cur?.spd || .02);
       ORBIT_BOOST.charge = Math.min(1, ORBIT_BOOST.charge + dt * (1.3 + curSpd * 22));
@@ -3339,6 +3428,28 @@ function update(dt) {
       const g = (0.0011 / (d * .0006 + .03)) * targetScale;
       PL.vx += (dx / d) * g * simScale;
       PL.vy += (dy / d) * g * simScale;
+      if (FLIGHT_ASSIST.active && PLAYER.gravityCharge > 0) {
+        const cfg = currentMode();
+        const assist = flightAssistState(nxt);
+        if (!assist) {
+          endFlightAssist();
+        } else {
+          const chargeScale = clamp(PLAYER.gravityCharge, .14, 1);
+          const pullBias = .42 + assist.near * .86 + assist.angle * .72 + assist.lane * .4;
+          const extraPull = (cfg.gravPull / (assist.d * .00086 + .05)) * pullBias * (.45 + chargeScale * .55);
+          const desiredVx = (assist.dx / assist.d) * assist.speed;
+          const desiredVy = (assist.dy / assist.d) * assist.speed;
+          const steer = clamp((cfg.gravPull * 8.5) * (.22 + assist.near * .58 + assist.angle * .5 + assist.lane * .34), 0, .18);
+          FLIGHT_ASSIST.usedThisFlight = true;
+          PL.vx = lerp(PL.vx, desiredVx, steer * simScale);
+          PL.vy = lerp(PL.vy, desiredVy, steer * simScale);
+          PL.vx += (assist.dx / assist.d) * extraPull * simScale;
+          PL.vy += (assist.dy / assist.d) * extraPull * simScale;
+          const drain = cfg.gravDrain * (1 + Math.max(0, RUN.jumps - 10) * .016) * (.92 + (1 - assist.near) * .36);
+          PLAYER.gravityCharge = Math.max(0, PLAYER.gravityCharge - dt * drain);
+          if (PLAYER.gravityCharge <= .001) endFlightAssist();
+        }
+      }
     }
     if (RUN.encounter) {
       const hz = RUN.encounter;
@@ -3825,10 +3936,17 @@ function startGame() {
   GRAVITY_FX.mix = 0;
   GRAVITY_FX.replay = null;
   ORBIT_BOOST.active = false;
+  ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
+  ORBIT_BOOST.pressedAt = 0;
+  FLIGHT_ASSIST.active = false;
+  FLIGHT_ASSIST.source = null;
+  FLIGHT_ASSIST.pointerId = null;
+  FLIGHT_ASSIST.usedThisFlight = false;
   queuedLaunch = false;
+  INPUT_LATCH.keyFlightHold = false;
   score = 0;
   hintDone = false;
   combo = 0;
@@ -3852,7 +3970,7 @@ function startGame() {
   clearTimeout(comboEl._t);
   comboEl.style.opacity = '0';
   comboEl.textContent = '';
-  Object.assign(PLAYER, { shield:0, perfects:0, nearMisses:0, riskHits:0, bossClears:0, routesTaken:0, perfectStreak:0, feverCharge:0 });
+  Object.assign(PLAYER, { shield:0, perfects:0, nearMisses:0, riskHits:0, bossClears:0, routesTaken:0, perfectStreak:0, feverCharge:0, gravityCharge:currentMode().gravStart });
   RUN.feverTimer = 0;
   RUN.bossChainLeft = 0;
   RUN.bossChainTotal = 0;
@@ -3952,27 +4070,80 @@ function touchLaunchTarget(x, y) {
 
 function startOrbitBoost(source, pointerId = null) {
   if (GS !== 'play' || PL.fly) return false;
-  if (ORBIT_BOOST.active && ORBIT_BOOST.source === source) return true;
-  ORBIT_BOOST.active = true;
+  if ((ORBIT_BOOST.active || ORBIT_BOOST.pending) && ORBIT_BOOST.source === source) return true;
+  ORBIT_BOOST.active = false;
+  ORBIT_BOOST.pending = true;
   ORBIT_BOOST.source = source;
   ORBIT_BOOST.pointerId = pointerId;
   ORBIT_BOOST.charge = 0;
+  ORBIT_BOOST.pressedAt = performance.now();
   return true;
 }
 
 function endOrbitBoost(source = null, pointerId = null) {
-  if (!ORBIT_BOOST.active) return false;
+  if (!ORBIT_BOOST.active && !ORBIT_BOOST.pending) return false;
   if (source && ORBIT_BOOST.source !== source) return false;
   if (pointerId !== null && ORBIT_BOOST.pointerId !== pointerId) return false;
+  const hadBoost = ORBIT_BOOST.active;
   ORBIT_BOOST.active = false;
+  ORBIT_BOOST.pending = false;
   ORBIT_BOOST.source = null;
   ORBIT_BOOST.pointerId = null;
   ORBIT_BOOST.charge = 0;
-  return true;
+  ORBIT_BOOST.pressedAt = 0;
+  return hadBoost ? 'boost' : 'tap';
 }
 
 function currentOrbitBoostFactor() {
   return ORBIT_BOOST.active && GS === 'play' && !PL.fly ? 1 + ORBIT_BOOST.charge * 1.08 : 1;
+}
+
+function triggerQueuedOrImmediateLaunch() {
+  if (locked) queuedLaunch = true;
+  else doLaunch();
+}
+function flightAssistState(nxt) {
+  if (!PL.fly || !nxt) return null;
+  const cfg = currentMode();
+  const dx = nxt.x - PL.x;
+  const dy = nxt.y - PL.y;
+  const d = Math.hypot(dx, dy) || .001;
+  const speed = Math.hypot(PL.vx, PL.vy) || .001;
+  const dot = (PL.vx * dx + PL.vy * dy) / (speed * d);
+  const window = Math.max(nxt.r * 4, Math.min(W, H) * cfg.gravWindow);
+  if (d > window || dot <= cfg.gravMinDot) return null;
+  const lateral = Math.abs(PL.vx * dy - PL.vy * dx) / speed;
+  const laneWindow = nxt.r * cfg.gravLaneMul + Math.min(W, H) * .03;
+  if (lateral > laneWindow) return null;
+  return {
+    dx,
+    dy,
+    d,
+    speed,
+    near: clamp(1 - d / window, 0, 1),
+    angle: clamp((dot - cfg.gravMinDot) / (1 - cfg.gravMinDot), 0, 1),
+    lane: clamp(1 - lateral / laneWindow, 0, 1)
+  };
+}
+function startFlightAssist(source, pointerId = null) {
+  if (GS !== 'play' || !PL.fly || PLAYER.gravityCharge <= .02) return false;
+  if (!flightAssistState(getNextNode())) return false;
+  FLIGHT_ASSIST.active = true;
+  FLIGHT_ASSIST.source = source;
+  FLIGHT_ASSIST.pointerId = pointerId;
+  if (source === 'key') INPUT_LATCH.keyFlightHold = true;
+  updateStatusHUD();
+  return true;
+}
+function endFlightAssist(source = null, pointerId = null) {
+  if (!FLIGHT_ASSIST.active) return false;
+  if (source && FLIGHT_ASSIST.source !== source) return false;
+  if (pointerId !== null && FLIGHT_ASSIST.pointerId !== pointerId) return false;
+  FLIGHT_ASSIST.active = false;
+  FLIGHT_ASSIST.source = null;
+  FLIGHT_ASSIST.pointerId = null;
+  updateStatusHUD();
+  return true;
 }
 
 function handlePointer(x, y, pointerId = null) {
@@ -3990,7 +4161,9 @@ function handlePointer(x, y, pointerId = null) {
     startOrbitBoost('pointer', pointerId);
     return;
   }
-  if (GS === 'play') doLaunch();
+  if (GS === 'play' && PL.fly) {
+    startFlightAssist('pointer', pointerId);
+  }
 }
 
 cv.addEventListener('pointerdown', e => {
@@ -3998,21 +4171,23 @@ cv.addEventListener('pointerdown', e => {
   handlePointer(e.clientX, e.clientY, e.pointerId);
 });
 cv.addEventListener('pointerup', e => {
+  endFlightAssist('pointer', e.pointerId);
   if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) {
-    if (locked) queuedLaunch = true;
-    else doLaunch();
+    triggerQueuedOrImmediateLaunch();
   }
 });
 cv.addEventListener('pointercancel', e => {
+  endFlightAssist('pointer', e.pointerId);
   endOrbitBoost('pointer', e.pointerId);
 });
 document.addEventListener('pointerup', e => {
+  endFlightAssist('pointer', e.pointerId);
   if (endOrbitBoost('pointer', e.pointerId) && GS === 'play' && !PL.fly) {
-    if (locked) queuedLaunch = true;
-    else doLaunch();
+    triggerQueuedOrImmediateLaunch();
   }
 });
 document.addEventListener('pointercancel', e => {
+  endFlightAssist('pointer', e.pointerId);
   endOrbitBoost('pointer', e.pointerId);
 });
 function isInteractiveTarget(node) {
@@ -4073,8 +4248,11 @@ window.addEventListener('orientationchange', () => {
   }
   if (e.code === 'Space' || e.code === 'Enter') {
     e.preventDefault();
-    if (GS === 'play' && !PL.fly) startOrbitBoost('key');
-    else if (GS === 'play') doLaunch();
+    if (GS === 'play' && !PL.fly) {
+      if (INPUT_LATCH.keyFlightHold) return;
+      startOrbitBoost('key');
+    }
+    else if (GS === 'play' && PL.fly) startFlightAssist('key');
     else if (GS === 'paused') resumeGame();
     else beginFromCurrentScreen();
   }
@@ -4096,10 +4274,16 @@ window.addEventListener('orientationchange', () => {
   }
 });
 document.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code === 'Enter') {
+    endFlightAssist('key');
+    if (INPUT_LATCH.keyFlightHold) {
+      INPUT_LATCH.keyFlightHold = false;
+      return;
+    }
+  }
   if ((e.code === 'Space' || e.code === 'Enter') && endOrbitBoost('key') && GS === 'play' && !PL.fly) {
     e.preventDefault();
-    if (locked) queuedLaunch = true;
-    else doLaunch();
+    triggerQueuedOrImmediateLaunch();
   }
 });
 
