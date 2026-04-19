@@ -754,9 +754,8 @@ function autoRouteSelection() {
   if (!routeChoice || PL.fly) return routeChoice?.selected ?? 0;
   const cur = pool[pidx];
   if (!cur) return routeChoice.selected;
-  const orbitAngle = cur.angle + PL.orbitOffset;
-  const dir = cur.spd > 0 ? 1 : -1;
-  const heading = Math.atan2(Math.cos(orbitAngle) * dir, -Math.sin(orbitAngle) * dir);
+  const launch = currentDisplayedLaunchState(cur);
+  const heading = Math.atan2(launch.vy, launch.vx);
   let bestIndex = routeChoice.selected;
   let bestErr = Infinity;
   const entries = routeEntries();
