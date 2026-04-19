@@ -337,9 +337,9 @@ function persist() {
 applyGraphicsSetting(save.graphics);
 
 const MODE_CONFIG = {
-  easy: { label:'Easy', pointer:80, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4, gravStart:.28, gravGain:.07, gravGainFloor:.28, gravPull:.0105, gravDrain:.48, gravWindow:.52, gravMinDot:.04, gravLaneMul:3.2 },
-  medium: { label:'Medium', pointer:56, scoreMult:1.25, catchBuffer:5, catchArc:.38, cloudAlpha:.08, orbitSpeed:.92, lives:2, gravStart:.18, gravGain:.048, gravGainFloor:.2, gravPull:.0078, gravDrain:.6, gravWindow:.47, gravMinDot:.16, gravLaneMul:2.55 },
-  hard: { label:'Hard', pointer:22, scoreMult:1.7, catchBuffer:0, catchArc:0, cloudAlpha:0, orbitSpeed:1.01, lives:1, gravStart:.1, gravGain:.032, gravGainFloor:.15, gravPull:.0058, gravDrain:.74, gravWindow:.42, gravMinDot:.26, gravLaneMul:2.05 }
+  easy: { label:'Easy', pointer:80, scoreMult:0.9, catchBuffer:14, catchArc:1.08, cloudAlpha:.16, orbitSpeed:.75, lives:4, gravStart:.28, gravGain:.07, gravGainFloor:.28, gravPull:.0072, gravDrain:.62, gravWindow:.6, gravMinDot:-.02, gravLaneMul:3.75 },
+  medium: { label:'Medium', pointer:56, scoreMult:1.25, catchBuffer:5, catchArc:.38, cloudAlpha:.08, orbitSpeed:.92, lives:2, gravStart:.18, gravGain:.048, gravGainFloor:.2, gravPull:.0053, gravDrain:.8, gravWindow:.54, gravMinDot:.08, gravLaneMul:3.05 },
+  hard: { label:'Hard', pointer:22, scoreMult:1.7, catchBuffer:0, catchArc:0, cloudAlpha:0, orbitSpeed:1.01, lives:1, gravStart:.1, gravGain:.032, gravGainFloor:.15, gravPull:.0039, gravDrain:1.02, gravWindow:.48, gravMinDot:.18, gravLaneMul:2.35 }
 };
 function currentMode() {
   return MODE_CONFIG[save.launchMode] || MODE_CONFIG.medium;
@@ -1021,7 +1021,11 @@ function progressionProfile(sc) {
   const encounterMoveStart = orbitMoveStart + 10;
   const encounterMoveRamp = clamp((jump - encounterMoveStart) / 14, 0, 1);
   const encounterMove = jump >= encounterMoveStart ? clamp(encounterMoveRamp + comboBoost * .18, 0, 1) : 0;
-  return { randomness, orbitMove, encounterMove };
+  const ovalStart = mode === 'easy' ? 27 : mode === 'medium' ? 25 : 23;
+  const ovalRamp = clamp((jump - ovalStart) / (mode === 'easy' ? 28 : mode === 'medium' ? 22 : 18), 0, 1);
+  const ovalMax = mode === 'easy' ? .12 : mode === 'medium' ? .16 : .19;
+  const ovalness = jump >= 25 ? clamp(ovalRamp * ovalMax + comboBoost * .02, 0, ovalMax) : 0;
+  return { randomness, orbitMove, encounterMove, ovalness };
 }
 
 function orbitSpawnClearance(x, y, r, prev, blockers = []) {
@@ -1160,7 +1164,8 @@ function nodeParams(sc) {
   const syncEase = clamp((sc - syncStart) / 16, 0, 1);
   const moveAmp = prog.orbitMove > 0 ? mn * ((modeName === 'easy' ? .008 : modeName === 'medium' ? .012 : .016) + prog.orbitMove * (modeName === 'easy' ? .01 : modeName === 'medium' ? .016 : .022)) : 0;
   const moveRate = .006 + prog.orbitMove * (modeName === 'easy' ? .012 : modeName === 'medium' ? .016 : .02);
-  return { r, dist, spd, launch, capArc, synced, relief, syncEase, moveAmp, moveRate, randomness:prog.randomness };
+  const oval = prog.ovalness > 0 ? prog.ovalness * (.35 + Math.random() * .65) : 0;
+  return { r, dist, spd, launch, capArc, synced, relief, syncEase, moveAmp, moveRate, randomness:prog.randomness, oval };
 }
 
 function genNode(prev, sc, forcedDir = null, blockers = []) {
@@ -1295,6 +1300,8 @@ function genNode(prev, sc, forcedDir = null, blockers = []) {
     pGateAngle: 0,
     pal,
     pr: 7 + Math.random() * 4,
+    oval: p.oval,
+    ovalTilt: Math.random() * Math.PI,
     relief: p.relief,
     kind: kindMeta.kind,
     stage: kindMeta.stage || 1,
@@ -2451,9 +2458,7 @@ function drawAlienShip() {
 function zoneCenter(n) {
   const gateAngle = lerpAngle(n.pGateAngle ?? n.gateAngle, n.gateAngle, renderAlpha);
   const { x:px, y:py } = renderPlayerState();
-  const nx = lerp(n.px ?? n.x, n.x, renderAlpha);
-  const ny = lerp(n.py ?? n.y, n.y, renderAlpha);
-  return n.synced ? gateAngle : Math.atan2(py - ny, px - nx);
+  return n.synced ? gateAngle : orbitParamAtPoint(n, px, py);
 }
 function renderPlayerState() {
   if (!PL.fly) {
@@ -2464,10 +2469,13 @@ function renderPlayerState() {
         cur.angle + PL.orbitOffset,
         renderAlpha
       );
-      const orbitRadius = lerp(cur.r + (PL.pSettle ?? PL.settle), cur.r + PL.settle, renderAlpha);
+      const settle = lerp(PL.pSettle ?? PL.settle, PL.settle, renderAlpha);
+      const centerX = lerp(cur.px ?? cur.x, cur.x, renderAlpha);
+      const centerY = lerp(cur.py ?? cur.y, cur.y, renderAlpha);
+      const pt = orbitPoint(cur, orbitAngle, settle, centerX, centerY);
       return {
-        x: cur.x + Math.cos(orbitAngle) * orbitRadius,
-        y: cur.y + Math.sin(orbitAngle) * orbitRadius
+        x: pt.x,
+        y: pt.y
       };
     }
   }
@@ -2484,29 +2492,29 @@ function currentDisplayedLaunchState(node) {
     node.angle + PL.orbitOffset,
     renderAlpha
   );
-  const orbitRadius = lerp(node.r + (PL.pSettle ?? PL.settle), node.r + PL.settle, renderAlpha);
+  const settle = lerp(PL.pSettle ?? PL.settle, PL.settle, renderAlpha);
   const dir = node.spd > 0 ? 1 : -1;
-  const px = centerX + Math.cos(orbitAngle) * orbitRadius;
-  const py = centerY + Math.sin(orbitAngle) * orbitRadius;
+  const pt = orbitPoint(node, orbitAngle, settle, centerX, centerY);
+  const tangent = orbitTangent(node, orbitAngle, settle);
   return {
     angle: orbitAngle,
-    x: px,
-    y: py,
-    vx: -Math.sin(orbitAngle) * node.launch * dir,
-    vy: Math.cos(orbitAngle) * node.launch * dir
+    x: pt.x,
+    y: pt.y,
+    vx: tangent.x * node.launch * dir,
+    vy: tangent.y * node.launch * dir
   };
 }
 function sampleLaunchState(node, launchDelay = 0) {
   const orbitAngle = node.angle + node.spd * launchDelay;
-  const px = node.x + Math.cos(orbitAngle) * node.r;
-  const py = node.y + Math.sin(orbitAngle) * node.r;
+  const pt = orbitPoint(node, orbitAngle, 0, node.x, node.y);
+  const tangent = orbitTangent(node, orbitAngle, 0);
   const dir = node.spd > 0 ? 1 : -1;
   return {
     angle: orbitAngle,
-    x: px,
-    y: py,
-    vx: -Math.sin(orbitAngle) * node.launch * dir,
-    vy: Math.cos(orbitAngle) * node.launch * dir
+    x: pt.x,
+    y: pt.y,
+    vx: tangent.x * node.launch * dir,
+    vy: tangent.y * node.launch * dir
   };
 }
 function encounterPull(enc, ed) {
@@ -2545,7 +2553,7 @@ function traceEncounterLaunch(node, nxt, enc, launchDelay = 0, keepPoints = fals
     x += vx;
     y += vy;
     if (keepPoints && (step % 3 === 0)) points.push({ x, y });
-    const ringMiss = Math.abs(Math.hypot(x - nxt.x, y - nxt.y) - nxt.r);
+    const ringMiss = orbitContactState(nxt, x, y).dist;
     if (ringMiss < minRingMiss) minRingMiss = ringMiss;
     if (ringMiss < PL.r + 5) {
       if (keepPoints) points.push({ x, y });
@@ -2615,14 +2623,14 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
   const ny = lerp(n.py ?? n.y, n.y, renderAlpha);
   if (role === 0) {
     if (PERF.nodeGlow) {
-      const ng = cx.createRadialGradient(nx, ny, 0, nx, ny, n.r * 3.8);
+      const ng = cx.createRadialGradient(nx, ny, 0, nx, ny, orbitAxes(n).rx * 3.8);
       ng.addColorStop(0, c2 + '88');
       ng.addColorStop(.55, c2 + '22');
       ng.addColorStop(1, c2 + '00');
       cx.save();
       cx.globalAlpha = .14;
       cx.beginPath();
-      cx.arc(nx, ny, n.r * 3.8, 0, Math.PI * 2);
+      cx.arc(nx, ny, orbitAxes(n).rx * 3.8, 0, Math.PI * 2);
       cx.fillStyle = ng;
       cx.fill();
       cx.restore();
@@ -2630,10 +2638,10 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
   }
 
   const dash = isVisited ? [3, 9] : routeLabel ? (routeSelected ? [10, 5] : [4, 7]) : role === 1 ? [8, 6] : role === 2 ? [3, 7] : [];
-  A(nx, ny, n.r, c0, role === 0 ? 2.6 : 1.9, alpha * .95, 0, Math.PI * 2, dash);
-  A(nx, ny, n.r, '#ffffff', role === 0 ? .7 : .5, alpha * .36, 0, Math.PI * 2, dash);
-  if (!isVisited && role < 2) A(nx, ny, n.r + 4, c0, role === 0 ? 1.2 : .9, alpha * .34, 0, Math.PI * 2, []);
-  if (!isVisited && n.kind === 'boss') A(nx, ny, n.r + 9, '#ffd86e', 2.2, alpha * .7, 0, Math.PI * 2, [2, 6]);
+  strokeOrbit(nx, ny, n, c0, role === 0 ? 2.6 : 1.9, alpha * .95, 0, Math.PI * 2, dash);
+  strokeOrbit(nx, ny, n, '#ffffff', role === 0 ? .7 : .5, alpha * .36, 0, Math.PI * 2, dash);
+  if (!isVisited && role < 2) strokeOrbit(nx, ny, { ...n, r:n.r + 4 }, c0, role === 0 ? 1.2 : .9, alpha * .34, 0, Math.PI * 2, []);
+  if (!isVisited && n.kind === 'boss') strokeOrbit(nx, ny, { ...n, r:n.r + 9 }, '#ffd86e', 2.2, alpha * .7, 0, Math.PI * 2, [2, 6]);
   C(nx, ny, role === 0 ? 4.4 + Math.sin(simTime * 3) * 1.3 : 3.2, c0, alpha * .92, isVisited ? 0 : role === 0 ? 16 : 6);
   C(nx, ny, 1.8, '#fff', alpha * .44);
 
@@ -2664,7 +2672,8 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
       cx.lineWidth = 1;
       cx.setLineDash([4, 10]);
       cx.beginPath();
-      cx.arc(nx, ny, cloudR, 0, Math.PI * 2);
+      const cloudShape = orbitAxes({ ...n, r:cloudR });
+      cx.ellipse(nx, ny, cloudShape.rx, cloudShape.ry, cloudShape.tilt, 0, Math.PI * 2);
       cx.stroke();
       cx.setLineDash([]);
       cx.restore();
@@ -2679,7 +2688,8 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
       cx.lineWidth = 5.8;
       cx.lineCap = 'round';
       cx.beginPath();
-      cx.arc(nx, ny, n.r, centre - n.capArc / 2, centre + n.capArc / 2);
+      const shape = orbitAxes(n);
+      cx.ellipse(nx, ny, shape.rx, shape.ry, shape.tilt, centre - n.capArc / 2, centre + n.capArc / 2);
       cx.stroke();
       cx.restore();
 
@@ -2695,14 +2705,16 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
       cx.lineWidth = 4.8;
       cx.lineCap = 'round';
       cx.beginPath();
-      cx.arc(nx, ny, n.r + 4, bonusCentre - n.bonusArc / 2, bonusCentre + n.bonusArc / 2);
+      const bonusShape = orbitAxes({ ...n, r:n.r + 4 });
+      cx.ellipse(nx, ny, bonusShape.rx, bonusShape.ry, bonusShape.tilt, bonusCentre - n.bonusArc / 2, bonusCentre + n.bonusArc / 2);
       cx.stroke();
       cx.restore();
     }
 
     if (role === 1) {
-      const gx = nx + Math.cos(centre) * n.r;
-      const gy = ny + Math.sin(centre) * n.r;
+      const gp = orbitPoint(n, centre, 0, nx, ny);
+      const gx = gp.x;
+      const gy = gp.y;
       C(gx, gy, n.pr * .8, c0, .2, PERF.planetLite ? 0 : 14);
       C(gx, gy, n.pr * .44, '#fff', .14, PERF.planetLite ? 0 : 8);
     }
@@ -2731,7 +2743,8 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
       cx.shadowColor = routeSelected ? '#ffd86e' : '#9ce7ff';
       cx.shadowBlur = routeSelected ? 22 : 12;
       cx.beginPath();
-      cx.arc(nx, ny, n.r * .54, 0, Math.PI * 2);
+      const innerShape = orbitAxes({ ...n, r:n.r * .54 });
+      cx.ellipse(nx, ny, innerShape.rx, innerShape.ry, innerShape.tilt, 0, Math.PI * 2);
       cx.stroke();
       cx.globalAlpha = routeSelected ? .84 : .68;
       cx.fillStyle = '#fff';
@@ -2753,7 +2766,8 @@ function drawNode(n, role, routeLabel = '', routeSelected = false) {
       cx.shadowColor = '#ffd86e';
       cx.shadowBlur = 26;
       cx.beginPath();
-      cx.arc(nx, ny, n.r + 9, gateAngle - n.capArc * .42, gateAngle + n.capArc * .42);
+      const gateShape = orbitAxes({ ...n, r:n.r + 9 });
+      cx.ellipse(nx, ny, gateShape.rx, gateShape.ry, gateShape.tilt, gateAngle - n.capArc * .42, gateAngle + n.capArc * .42);
       cx.stroke();
       cx.restore();
     }
@@ -2978,9 +2992,11 @@ function draw() {
       if (n) {
         if (RUN.encounter) drawEncounterGuide(n, getNextNode(), RUN.encounter);
         const orbitAngle = lerpAngle(n.pAngle ?? n.angle, n.angle, renderAlpha);
+        const settle = lerp(PL.pSettle ?? PL.settle, PL.settle, renderAlpha);
         const dir = n.spd > 0 ? 1 : -1;
-        const tx = -Math.sin(orbitAngle) * dir;
-        const ty = Math.cos(orbitAngle) * dir;
+        const tangent = orbitTangent(n, orbitAngle, settle);
+        const tx = tangent.x * dir;
+        const ty = tangent.y * dir;
         const len = currentMode().pointer;
         const ax = playerX + tx * len;
         const ay = playerY + ty * len;
@@ -3067,6 +3083,74 @@ function blendAngle(a, b, t) {
     (1 - t) * Math.sin(a) + t * Math.sin(b),
     (1 - t) * Math.cos(a) + t * Math.cos(b)
   );
+}
+function orbitAxes(n, settle = 0) {
+  const base = Math.max(6, n.r + settle);
+  const oval = clamp(n.oval || 0, 0, .24);
+  return {
+    rx: base * (1 + oval),
+    ry: base * (1 - oval * .72),
+    tilt: n.ovalTilt || 0
+  };
+}
+function orbitPoint(n, angle, settle = 0, cx0 = n.x, cy0 = n.y) {
+  const { rx, ry, tilt } = orbitAxes(n, settle);
+  const px = Math.cos(angle) * rx;
+  const py = Math.sin(angle) * ry;
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  return {
+    x: cx0 + px * ct - py * st,
+    y: cy0 + px * st + py * ct
+  };
+}
+function orbitTangent(n, angle, settle = 0) {
+  const { rx, ry, tilt } = orbitAxes(n, settle);
+  const tx = -Math.sin(angle) * rx;
+  const ty = Math.cos(angle) * ry;
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  const wx = tx * ct - ty * st;
+  const wy = tx * st + ty * ct;
+  const mag = Math.hypot(wx, wy) || 1;
+  return { x: wx / mag, y: wy / mag };
+}
+function orbitParamAtPoint(n, x, y) {
+  const { rx, ry, tilt } = orbitAxes(n, 0);
+  const dx = x - n.x;
+  const dy = y - n.y;
+  const ct = Math.cos(tilt);
+  const st = Math.sin(tilt);
+  const lx = dx * ct + dy * st;
+  const ly = -dx * st + dy * ct;
+  return Math.atan2(ly / Math.max(1, ry), lx / Math.max(1, rx));
+}
+function orbitContactState(n, x, y) {
+  const angle = orbitParamAtPoint(n, x, y);
+  const point = orbitPoint(n, angle);
+  return {
+    angle,
+    x: point.x,
+    y: point.y,
+    dist: Math.hypot(x - point.x, y - point.y)
+  };
+}
+function strokeOrbit(x, y, n, col, lw, a = 1, a1 = 0, a2 = Math.PI * 2, dash = []) {
+  const { rx, ry, tilt } = orbitAxes(n, 0);
+  cx.save();
+  cx.globalAlpha = a;
+  if (PERF.ringBlur > 0) {
+    cx.shadowColor = col;
+    cx.shadowBlur = PERF.ringBlur;
+  }
+  cx.setLineDash(dash);
+  cx.beginPath();
+  cx.ellipse(x, y, rx, ry, tilt, a1, a2);
+  cx.strokeStyle = col;
+  cx.lineWidth = lw;
+  cx.stroke();
+  cx.setLineDash([]);
+  cx.restore();
 }
 
 function grantShield(reason = 'shield') {
@@ -3352,13 +3436,15 @@ function doCapture(nxt, quality, hitAngle) {
   nxt.pAngle = hitAngle;
   nxt.pGateAngle = nxt.gateAngle;
   nxt.pBonusAngle = nxt.bonusAngle;
-  const positiveTangentX = -Math.sin(hitAngle);
-  const positiveTangentY = Math.cos(hitAngle);
+  const positiveTangent = orbitTangent(nxt, hitAngle);
+  const positiveTangentX = positiveTangent.x;
+  const positiveTangentY = positiveTangent.y;
   const incomingDot = PL.vx * positiveTangentX + PL.vy * positiveTangentY;
   nxt.spd = Math.abs(nxt.spd) * (incomingDot >= 0 ? 1 : -1);
 
-  PL.x = nxt.x + Math.cos(nxt.angle) * nxt.r;
-  PL.y = nxt.y + Math.sin(nxt.angle) * nxt.r;
+  const landingPoint = orbitPoint(nxt, nxt.angle);
+  PL.x = landingPoint.x;
+  PL.y = landingPoint.y;
   PL.px = PL.x;
   PL.py = PL.y;
   PL.vx = 0;
@@ -3368,8 +3454,8 @@ function doCapture(nxt, quality, hitAngle) {
   PL.settle = clamp(-incomingRadial * .72, -10.5, 10.5);
   PL.settleV = clamp(-incomingRadial * .18, -3.4, 3.4);
   PL.pOrbitOffset = 0;
-  PL.orbitOffset = clamp((incomingDot / Math.max(42, nxt.r)) * .042, -.16, .16);
-  PL.orbitOffsetV = clamp((incomingDot / Math.max(42, nxt.r)) * .015, -.032, .032);
+  PL.orbitOffset = clamp((incomingDot / Math.max(42, orbitAxes(nxt).rx)) * .042, -.16, .16);
+  PL.orbitOffsetV = clamp((incomingDot / Math.max(42, orbitAxes(nxt).rx)) * .015, -.032, .032);
 
   addRing(nxt.x, nxt.y, nxt.r * .6, nxt.pal[0], 3.5, 4.5, .027);
   addRing(nxt.x, nxt.y, nxt.r * .25, '#fff', 2.0, 2.8, .04);
@@ -3602,10 +3688,10 @@ function update(dt) {
       PL.orbitOffset = 0;
       PL.orbitOffsetV = 0;
     }
-    const orbitRadius = cur.r + PL.settle;
     const orbitAngle = cur.angle + PL.orbitOffset;
-    PL.x = cur.x + Math.cos(orbitAngle) * orbitRadius;
-    PL.y = cur.y + Math.sin(orbitAngle) * orbitRadius;
+    const orbitPos = orbitPoint(cur, orbitAngle, PL.settle);
+    PL.x = orbitPos.x;
+    PL.y = orbitPos.y;
     if (routeChoice) setRouteSelection(autoRouteSelection(), { silent:true });
     PL.spin += .08 * simScale;
     PL.trail = [];
@@ -3629,17 +3715,17 @@ function update(dt) {
           endFlightAssist();
         } else {
           const chargeScale = clamp(PLAYER.gravityCharge, .14, 1);
-          const pullBias = .42 + assist.near * .86 + assist.angle * .72 + assist.lane * .4;
-          const extraPull = (cfg.gravPull / (assist.d * .00086 + .05)) * pullBias * (.45 + chargeScale * .55);
+          const pullBias = .2 + assist.near * .42 + assist.angle * .34 + assist.lane * .24;
+          const extraPull = (cfg.gravPull / (assist.d * .00105 + .082)) * pullBias * (.3 + chargeScale * .36);
           const desiredVx = (assist.dx / assist.d) * assist.speed;
           const desiredVy = (assist.dy / assist.d) * assist.speed;
-          const steer = clamp((cfg.gravPull * 8.5) * (.22 + assist.near * .58 + assist.angle * .5 + assist.lane * .34), 0, .18);
+          const steer = clamp((cfg.gravPull * 5.9) * (.1 + assist.near * .22 + assist.angle * .18 + assist.lane * .12), 0, .07);
           FLIGHT_ASSIST.usedThisFlight = true;
           PL.vx = lerp(PL.vx, desiredVx, steer * simScale);
           PL.vy = lerp(PL.vy, desiredVy, steer * simScale);
           PL.vx += (assist.dx / assist.d) * extraPull * simScale;
           PL.vy += (assist.dy / assist.d) * extraPull * simScale;
-          const drain = cfg.gravDrain * (1 + Math.max(0, RUN.jumps - 10) * .016) * (.92 + (1 - assist.near) * .36);
+          const drain = cfg.gravDrain * (1 + Math.max(0, RUN.jumps - 10) * .014) * (.92 + (1 - assist.near) * .34);
           PLAYER.gravityCharge = Math.max(0, PLAYER.gravityCharge - dt * drain);
           if (PLAYER.gravityCharge <= .001) endFlightAssist();
         }
@@ -3698,11 +3784,12 @@ function update(dt) {
       const dx = PL.x - nxt.x;
       const dy = PL.y - nxt.y;
       const d = Math.hypot(dx, dy);
-      const hitRadius = Math.abs(d - nxt.r);
+      const contact = orbitContactState(nxt, PL.x, PL.y);
+      const hitRadius = contact.dist;
       const assistCatch = assistCatchProfile(nxt, hitRadius);
       const radialWindow = PL.r + 2 + (currentMode().catchBuffer || 0) + assistCatch.radialBoost;
       if (hitRadius < radialWindow) {
-        const hitAngle = Math.atan2(dy, dx);
+        const hitAngle = contact.angle;
         const profile = captureProfile(nxt, hitAngle);
         if (hitRadius <= PL.r + 2 + profile.radialBand + assistCatch.bandBoost && profile.catchErr < (profile.catchArc * assistCatch.arcMul) / 2) {
           doCapture(nxt, classifyCapture(nxt, hitAngle, profile.laneErr), hitAngle);
