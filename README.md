@@ -11,9 +11,9 @@ Live build:
 `SpaceBar` is a single-file HTML canvas game where you:
 
 - launch from orbit to orbit
-- build combo and fever
+- build combo, gravity and fever
 - route through moving targets
-- use gravity assists around planets, stars, and rare black holes
+- use gravity assists to and around planets, stars, and rare black holes
 - trigger music-reactive visuals and small replay moments for successful bend landings
 
 ## Controls
@@ -23,6 +23,7 @@ Live build:
 - `Space` / `Enter`: start or launch
 - Hold `Space` / `Enter`: temporarily speed up the current orbit
 - Release after holding: launch
+- Hold `Space` / `Enter`: in transit to use gravity to steer towards destination
 - `Esc`: pause
 - `R`: instant restart
 - `Left` / `Right` or `A` / `D`: route choice when a fork is active
@@ -32,6 +33,7 @@ Live build:
 - Tap target ring: launch
 - Hold on the playfield: temporarily speed up the current orbit
 - Release after holding: launch
+- Hold on the playfield: in transit to use gravity to steer towards destination
 - Use on-screen `Pause` / `Retry` buttons
 
 ## Graphics
@@ -48,6 +50,7 @@ The default is intended to be `High`, and user-selected settings are persisted a
 ## Current Features
 
 - gravity slow-time near strong gravity fields
+- gravity bends paths with acumulated points
 - gravity echo replay at the bottom of the screen after successful bend landings
 - praise popups for strong jumps and slingshot landings
 - per-mode gameplay tuning
