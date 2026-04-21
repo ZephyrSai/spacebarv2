@@ -1838,10 +1838,15 @@ function pushFlightTracePoint(x, y) {
 function alienBodyHit() {
   const a = RUN.alien;
   if (!a || a.passive || !PL.fly) return false;
-  const dx = PL.x - a.x;
-  const dy = PL.y - a.y;
-  const rx = 22 + PL.r;
-  const ry = 12 + PL.r * .85;
+  const focus = cameraFocusPoint();
+  const camX = focus ? (W / 2 - focus.fx) : CAM.x;
+  const camY = focus ? (H / 2 - focus.fy) : CAM.y;
+  const px = PL.x + camX;
+  const py = PL.y + camY;
+  const dx = px - a.x;
+  const dy = py - a.y;
+  const rx = 34 + PL.r;
+  const ry = 20 + PL.r;
   return (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1;
 }
 function beginFTLRewind(cur) {
@@ -4587,9 +4592,11 @@ document.addEventListener('keyup', e => {
 });
 
 function showHS() {
+  Music.unlock();
   updateHighScorePanel();
   document.getElementById('hsp').classList.add('open');
 }
+document.addEventListener('pointerdown', () => { Music.unlock(); }, { passive:true });
 document.getElementById('b-play').addEventListener('click', () => { Music.unlock(); beginFromCurrentScreen(); });
 document.getElementById('b-how').addEventListener('click', () => { Music.unlock(); showHowTo(); });
 document.getElementById('b-how-close').addEventListener('click', closeHowTo);
@@ -4637,6 +4644,7 @@ document.getElementById('tutorial-skip').addEventListener('click', () => {
 });
 document.querySelectorAll('.gfx-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    Music.unlock();
     save.graphics = btn.dataset.gfx;
     persist();
     applyGraphicsSetting(save.graphics);
@@ -4645,6 +4653,7 @@ document.querySelectorAll('.gfx-btn').forEach(btn => {
 });
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    Music.unlock();
     save.launchMode = btn.dataset.mode;
     persist();
     updateModeButtons();
