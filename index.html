@@ -3123,25 +3123,35 @@ function orbitTangent(n, angle, settle = 0) {
   const mag = Math.hypot(wx, wy) || 1;
   return { x: wx / mag, y: wy / mag };
 }
-function orbitParamAtPoint(n, x, y) {
+function orbitParamAtPoint(n, x, y, cx0 = n.x, cy0 = n.y) {
   const { rx, ry, tilt } = orbitAxes(n, 0);
-  const dx = x - n.x;
-  const dy = y - n.y;
+  const dx = x - cx0;
+  const dy = y - cy0;
   const ct = Math.cos(tilt);
   const st = Math.sin(tilt);
   const lx = dx * ct + dy * st;
   const ly = -dx * st + dy * ct;
   return Math.atan2(ly / Math.max(1, ry), lx / Math.max(1, rx));
 }
-function orbitContactState(n, x, y) {
-  const angle = orbitParamAtPoint(n, x, y);
-  const point = orbitPoint(n, angle);
+function orbitContactState(n, x, y, cx0 = n.x, cy0 = n.y) {
+  const angle = orbitParamAtPoint(n, x, y, cx0, cy0);
+  const point = orbitPoint(n, angle, 0, cx0, cy0);
   return {
     angle,
     x: point.x,
     y: point.y,
     dist: Math.hypot(x - point.x, y - point.y)
   };
+}
+function sweptOrbitContactState(n, x, y) {
+  const states = [
+    orbitContactState(n, x, y, n.x, n.y),
+    orbitContactState(n, x, y, n.px ?? n.x, n.py ?? n.y)
+  ];
+  const midX = lerp(n.px ?? n.x, n.x, .5);
+  const midY = lerp(n.py ?? n.y, n.y, .5);
+  states.push(orbitContactState(n, x, y, midX, midY));
+  return states.reduce((best, cur) => cur.dist < best.dist ? cur : best);
 }
 function strokeOrbit(x, y, n, col, lw, a = 1, a1 = 0, a2 = Math.PI * 2, dash = []) {
   const { rx, ry, tilt } = orbitAxes(n, 0);
@@ -3792,7 +3802,7 @@ function update(dt) {
       const dx = PL.x - nxt.x;
       const dy = PL.y - nxt.y;
       const d = Math.hypot(dx, dy);
-      const contact = orbitContactState(nxt, PL.x, PL.y);
+      const contact = sweptOrbitContactState(nxt, PL.x, PL.y);
       const hitRadius = contact.dist;
       const assistCatch = assistCatchProfile(nxt, hitRadius);
       const radialWindow = PL.r + 2 + (currentMode().catchBuffer || 0) + assistCatch.radialBoost;
